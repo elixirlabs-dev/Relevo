@@ -73,7 +73,8 @@ A receipt for payouts an issuer (a grant programme, a payroll platform, a payout
 | File | What it is |
 |---|---|
 | [`elivo-direct-receipt-1.schema.json`](elivo-direct-receipt-1.schema.json) | JSON Schema (draft 2020-12) |
-| [`apps/web/public/receipts/testnet-direct-payroll.json`](../../apps/web/public/receipts/testnet-direct-payroll.json) | A real receipt anchored on testnet, from invented payout data |
+| [`apps/web/public/receipts/testnet-direct-payroll.json`](../../apps/web/public/receipts/testnet-direct-payroll.json) | A real receipt anchored on testnet, from invented payout data (ed25519) |
+| [`apps/web/public/receipts/testnet-direct-payroll-pq.json`](../../apps/web/public/receipts/testnet-direct-payroll-pq.json) | The same payouts, signed with ed25519 and ML-DSA-65 under the issuer's key version 2 |
 
 What it proves, and what it doesn't: that the issuer's account published this exact list of payouts at a given time and can't change it afterwards. It does not prove that a bank carried out each transfer; that needs a bank-side source such as Mexico's CEP, which is on the roadmap.
 
@@ -83,18 +84,19 @@ What it proves, and what it doesn't: that the issuer's account published this ex
 - `rail` and `currency`: for example `SPEI` and `MXN`. On the SPEI rail every account is checked as a CLABE before the receipt is built.
 - Each payout: `payee_ref` = `sha256(salt ‖ account)` in hex (the salt stays with the issuer), `account_last4`, `amount` (two decimal places), `status` (`Paid`, `Returned` or `Failed`), `paid_at` (ISO 8601 UTC) and `reference` (the rail's own reference, or why the payout wasn't made).
 - `totals`: `count`, `paid` (sum of `Paid` amounts) and `not_paid` (the rest), recomputable from the rows.
-- `signatures`: a list. Today it holds one ed25519 signature. An issuer that publishes an ML-DSA-65 key adds a second, post-quantum signature over the same bytes.
+- `signatures`: a list. It holds one ed25519 signature, plus an ML-DSA-65 (FIPS 204, post-quantum) signature when the issuer has published an ML-DSA-65 key. For ML-DSA-65, `public_key` is the 1,952-byte key in base64 and `sig` the 3,309-byte signature in base64.
 
 ## Signing and the anchored hash
 
 1. **Signed bytes:** the RFC 8785 canonical JSON of the receipt without its `signatures` field.
 2. **Anchored hash:** `base58(sha256(canonical JSON of the whole receipt, signatures included))`, written with the registry's `anchor(receipt_id, receipt_hash)`.
-3. **Keys:** the issuer publishes them with `set_keys`. Keys are versioned, and each anchor records the version in force, so rotating a key never changes how an older receipt verifies.
+3. **Post-quantum signature:** ML-DSA-65 (pure, not pre-hashed) over the same bytes, with the FIPS 204 context string `elivo-direct-receipt-1`, so the signature can't be reused for anything else.
+4. **Keys:** the issuer publishes them with `set_keys(receipt_pk, mldsa65_pk)`. Keys are versioned, and each anchor records the version in force, so rotating a key never changes how an older receipt verifies.
 
 ## How to verify
 
 1. Choose the registry account yourself, and call `get_receipt({"issuer": <issuer>, "receipt_id": <receipt_id>})`.
-2. Check that the ed25519 signature is by the returned `receipt_pk`.
+2. Check that the ed25519 signature is by the returned `receipt_pk`. If `mldsa65_pk` is set, the receipt must also carry an ML-DSA-65 signature by that key, and it must verify; if it isn't set, the receipt must not carry one.
 3. Check that the hash of the file equals the returned `receipt_hash`.
 4. Recompute the totals.
 
@@ -106,4 +108,4 @@ What it proves, and what it doesn't: that the issuer's account published this ex
 pnpm issue-receipt samples/payroll-results.csv --id <receipt-id> --issuer <your-testnet-account>
 ```
 
-The results CSV has the columns `name,account,amount,status,paid_at,reference`. Names and full account numbers never leave your machine. The command publishes your receipt key if needed, signs, anchors, and writes the receipt and its salt to `.data/receipts/`.
+Add `--pq` to sign with ML-DSA-65 as well; the command creates the post-quantum key on first use and publishes it with your ed25519 key. The results CSV has the columns `name,account,amount,status,paid_at,reference`. Names and full account numbers never leave your machine. The command publishes your receipt key if needed, signs, anchors, and writes the receipt and its salt to `.data/receipts/`.

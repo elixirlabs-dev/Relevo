@@ -5,6 +5,7 @@
 import canonicalize from "canonicalize";
 import { b58decode, b58encode } from "./base58.ts";
 import type { DirectReceipt } from "./direct-receipt.ts";
+import { mldsaVerify } from "./pq-keys.ts";
 import type { VerifyResult } from "./receipt.ts";
 
 const canonicalBytes = (v: unknown) => new TextEncoder().encode(canonicalize(v) ?? "");
@@ -47,24 +48,35 @@ export interface IssuerKeys {
 }
 
 /**
- * ok when the ed25519 signature is by `keys.receipt_pk`. A receipt that carries an ML-DSA-65
- * signature, or whose issuer published an ML-DSA-65 key, is not supported by this verifier.
+ * ok when the ed25519 signature is by `keys.receipt_pk` and, if the issuer published an ML-DSA-65 key,
+ * the ML-DSA-65 signature is by that key. Both cover the same bytes. A post-quantum signature with no
+ * post-quantum key on-chain, or a missing one when there is, is malformed.
  */
 export async function verifyDirectSignaturesWeb(r: DirectReceipt, keys: IssuerKeys): Promise<VerifyResult> {
   const sigs = Array.isArray(r?.signatures) ? r.signatures : [];
   const ed = sigs.filter((s) => s?.alg === "ed25519");
-  if (ed.length !== 1 || sigs.length !== 1 || keys.mldsa65_pk) return { ok: false, reason: "malformed" };
-  if (ed[0].public_key !== keys.receipt_pk) return { ok: false, reason: "key_mismatch" };
+  const pq = sigs.filter((s) => s?.alg === "ml-dsa-65");
+  const wantPq = !!keys.mldsa65_pk;
+  if (ed.length !== 1 || pq.length !== (wantPq ? 1 : 0) || sigs.length !== ed.length + pq.length)
+    return { ok: false, reason: "malformed" };
+  if (ed[0].public_key !== keys.receipt_pk || (wantPq && pq[0].public_key !== keys.mldsa65_pk))
+    return { ok: false, reason: "key_mismatch" };
   const raw = rawEd25519(keys.receipt_pk);
   const sig = typeof ed[0].sig === "string" ? fromBase64(ed[0].sig) : null;
   if (!raw || !sig || sig.length !== 64) return { ok: false, reason: "malformed" };
+  const msg = directSigningBytes(r);
   try {
-    return (await ed25519Verify(raw, sig, directSigningBytes(r)))
-      ? { ok: true }
-      : { ok: false, reason: "bad_signature" };
+    if (!(await ed25519Verify(raw, sig, msg))) return { ok: false, reason: "bad_signature" };
   } catch {
     return { ok: false, reason: "malformed" };
   }
+  if (wantPq) {
+    const pk = fromBase64(keys.mldsa65_pk as string);
+    const pqSig = typeof pq[0].sig === "string" ? fromBase64(pq[0].sig) : null;
+    if (!pk || !pqSig) return { ok: false, reason: "malformed" };
+    if (!mldsaVerify(pk, msg, pqSig)) return { ok: false, reason: "bad_signature" };
+  }
+  return { ok: true };
 }
 
 /** base58(sha256(canonical JSON of the whole signed receipt)): the hash the registry anchors. */

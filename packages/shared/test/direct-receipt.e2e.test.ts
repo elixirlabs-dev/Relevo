@@ -10,6 +10,7 @@ import {
 } from "../src/direct-issue.ts";
 import { directHashB58Web, verifyDirectSignaturesWeb } from "../src/direct-verify-web.ts";
 import { keyFromSeed } from "../src/keys.ts";
+import { mldsaFromSeed } from "../src/pq-keys.ts";
 import { type LocalStack, startLocalStack } from "../src/testing/localstack.ts";
 
 const CSV = `name,account,amount,status,paid_at,reference
@@ -79,5 +80,36 @@ describe("direct receipts on the registry", () => {
       receipt_id: "nov-contractors",
     });
     expect(after.receipt_pk).toBe(receiptKey.publicKeyStr);
+  });
+
+  it("anchors a post-quantum receipt: the registry keeps the ML-DSA-65 key, and both signatures verify", async () => {
+    const { chain, deployment: d, keys } = stack;
+    const registry = d.registry as string;
+    const issuerId = `payroll.${d.escrow.split(".").slice(1).join(".")}`;
+    const issuer = chain.signer(issuerId, keys.accounts[issuerId]);
+    const ed = keyFromSeed(randomBytes(32));
+    const pq = mldsaFromSeed(randomBytes(32));
+    await ensureIssuerKeys(chain.view.bind(chain), issuer, registry, ed, pq);
+    const { rows } = parseResultsCsv(CSV, { rail: "SPEI" });
+    const r = signDirectReceipt(
+      buildDirectReceipt(rows, {
+        network: "sandbox",
+        registry,
+        issuer: issuerId,
+        receipt_id: "nov-pq",
+        rail: "SPEI",
+        currency: "MXN",
+        salt: randomBytes(16),
+      }),
+      ed,
+      pq,
+    );
+    await anchorDirectReceipt(issuer, registry, r);
+    const onChain = await chain.view<AnchorView>(registry, "get_receipt", {
+      issuer: issuerId,
+      receipt_id: "nov-pq",
+    });
+    expect(onChain.mldsa65_pk).toBe(pq.publicKeyB64);
+    expect(await verifyDirectSignaturesWeb(r, onChain)).toEqual({ ok: true });
   });
 });

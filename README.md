@@ -32,7 +32,7 @@ No keys, accounts or funds are needed.
 
    Open http://localhost:3000/verify and choose "Use the testnet reference receipt (batch 5)". Four checks run in your browser, and all four pass.
 3. **Tamper with it.** Download the [reference receipt](apps/web/public/receipts/testnet-batch-5.json), change any amount, and upload it on the same page. The signature check fails.
-4. **Check a receipt for payouts made outside the escrow.** On the same page, choose "Use a payroll receipt made outside the escrow". A sample payroll issuer paid five contractors on its own, then signed and anchored a receipt in the receipt registry. The same four checks run against the registry.
+4. **Check a post-quantum receipt for payouts made outside the escrow.** On the same page, choose "Use a payroll receipt made outside the escrow (post-quantum signed)". A sample payroll issuer paid five contractors on its own, then signed the receipt twice, with ed25519 and with ML-DSA-65 (FIPS 204, post-quantum), and anchored it in the receipt registry. The same four checks run against the registry, and both signatures must match the keys the issuer published on-chain.
 
 The same site shows the batch straight from the contract at http://localhost:3000/chain/5 and each firm's bond and record at http://localhost:3000/firms.
 
@@ -45,6 +45,7 @@ The same site shows the batch straight from the contract at http://localhost:300
 | Router: quotes, assignment, reroute, settle, refund, receipt anchoring (`apps/router`) | Real service. It signs only with a function-call key limited to six escrow methods. |
 | Signed receipts and `verify-receipt` | Real ed25519 signatures over RFC 8785 canonical JSON. The hash is anchored on-chain. |
 | Receipt registry for payouts made outside the escrow (`contracts/registry`, Rust) and `pnpm issue-receipt` | Real contract, on testnet. Unaudited. An issuer publishes its receipt keys and anchors each receipt's hash; anchors can't be replaced. |
+| Post-quantum receipt signatures (ML-DSA-65, FIPS 204) | Real, for receipts made outside the escrow: a second signature beside ed25519, checked in the browser against the issuer's ML-DSA-65 key in the registry. Uses `@noble/post-quantum`, which has not been independently audited. Batch receipts from the escrow are still ed25519 only. |
 | Receipt format, `/verify` and CSV export | Real. The format is published as a JSON Schema with test vectors ([`docs/receipts`](docs/receipts/)). `/verify` checks a receipt against the chain in the browser and exports it as CSV once every check passes. |
 | CSV import with CLABE check-digit validation | Real |
 | Web app (`apps/web`, Next.js) | Real. Payout state comes from the escrow's view methods; the router only adds payee names (last 4 digits of the account) and tx links. |
@@ -257,7 +258,7 @@ Demo mode: one penalty period is 10 s.
 | Firms | [mx1](https://testnet.nearblocks.io/address/mx1.pg-1794403941.testnet) · [mx2](https://testnet.nearblocks.io/address/mx2.pg-1794403941.testnet) · [mx3](https://testnet.nearblocks.io/address/mx3.pg-1794403941.testnet) `.pg-1794403941.testnet` |
 | DAO (Sputnik v2) | [elivo-1794414333.sputnikv2.testnet](https://testnet.nearblocks.io/address/elivo-1794414333.sputnikv2.testnet) |
 | Receipt registry | [registry.pg-1794403941.testnet](https://testnet.nearblocks.io/address/registry.pg-1794403941.testnet) |
-| Sample issuer (payouts outside the escrow) | [payroll.pg-1794403941.testnet](https://testnet.nearblocks.io/address/payroll.pg-1794403941.testnet), receipt `2026-11-contractors` anchored in [5jpN13rk…](https://testnet.nearblocks.io/txns/5jpN13rkWvJsPreDv5aFiv9WCJnp6v98tJgow8LaDxBh) |
+| Sample issuer (payouts outside the escrow) | [payroll.pg-1794403941.testnet](https://testnet.nearblocks.io/address/payroll.pg-1794403941.testnet), receipt `2026-11-contractors` (ed25519, key version 1) anchored in [5jpN13rk…](https://testnet.nearblocks.io/txns/5jpN13rkWvJsPreDv5aFiv9WCJnp6v98tJgow8LaDxBh); receipt `2026-11-contractors-pq` (ed25519 + ML-DSA-65, key version 2) anchored in [Fg5PANuD…](https://testnet.nearblocks.io/txns/Fg5PANuDvpADDG5GsJHydD3Tm68YV7rHd5DU4GEcjaRj) |
 | Reference run | Batch 5, receipt anchored in [2qeoXKVn…](https://testnet.nearblocks.io/txns/2qeoXKVnS28WxkdEy5kaAb7CRbk5jRviq2Lq2BavWg3M) |
 
 ### Reference run, step by step
@@ -298,7 +299,7 @@ What stands between this prototype and production, what to improve next, and whe
 Further out:
 
 - **Delivery checked against the bank's record.** In Mexico that is the CEP, the electronic payment receipt issued by Banxico for a SPEI transfer. It replaces the simulated oracle's word.
-- **Post-quantum receipts.** A second signature (ML-DSA-65, FIPS 204) beside Ed25519 in an `elivo-receipt-2` format, so a receipt kept for years can still be checked. The on-chain hash does not change. NEAR's protocol added ML-DSA-65 account keys in 2026.
+- **Post-quantum batch receipts.** Receipts made outside the escrow already carry an ML-DSA-65 signature beside ed25519. The same for escrow batch receipts needs the escrow to snapshot an ML-DSA-65 key per batch. NEAR's protocol added ML-DSA-65 account keys in 2026.
 
 ## Disclosures
 

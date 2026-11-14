@@ -52,8 +52,11 @@ describe("elivo-direct-receipt-1 schema", () => {
     JSON.parse(read("docs/receipts/elivo-direct-receipt-1.schema.json")),
   );
   const sample = JSON.parse(read("apps/web/public/receipts/testnet-direct-payroll.json"));
-  it("accepts the testnet sample payroll receipt", () => {
+  it("accepts the testnet sample payroll receipts, with and without a post-quantum signature", () => {
     expect(direct(sample), JSON.stringify(direct.errors)).toBe(true);
+    const pq = JSON.parse(read("apps/web/public/receipts/testnet-direct-payroll-pq.json"));
+    expect(pq.signatures.map((x: { alg: string }) => x.alg)).toEqual(["ed25519", "ml-dsa-65"]);
+    expect(direct(pq), JSON.stringify(direct.errors)).toBe(true);
   });
   it("rejects a receipt without signatures, or with an extra field", () => {
     expect(direct({ ...sample, signatures: [] })).toBe(false);

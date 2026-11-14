@@ -226,3 +226,46 @@ B,012180001234567899,50,returned,,ACCOUNT_CLOSED
     });
   });
 });
+
+describe("verifyAgainstChain with a post-quantum direct receipt", async () => {
+  const { buildDirectReceipt, parseResultsCsv, signDirectReceipt, directHashB58 } = await import(
+    "@elivo/shared/direct-issue"
+  );
+  const { keyFromSeed } = await import("@elivo/shared/keys");
+  const { mldsaFromSeed } = await import("@elivo/shared/pq-keys");
+  const ed = keyFromSeed(new Uint8Array(32).fill(4));
+  const pq = mldsaFromSeed(new Uint8Array(32).fill(4));
+  const registry = "registry.example.testnet";
+  const r = signDirectReceipt(
+    buildDirectReceipt(
+      parseResultsCsv(
+        "name,account,amount,status,paid_at,reference\nA,002010077777777771,100,paid,2026-11-14T10:00:00Z,R1\n",
+        { rail: "SPEI" },
+      ).rows,
+      {
+        network: "testnet",
+        registry,
+        issuer: "payroll.example.testnet",
+        receipt_id: "pq",
+        rail: "SPEI",
+        currency: "MXN",
+        salt: new Uint8Array(16),
+      },
+    ),
+    ed,
+    pq,
+  );
+  const view = async <T>(): Promise<T> =>
+    ({
+      receipt_hash: directHashB58(r),
+      receipt_pk: ed.publicKeyStr,
+      mldsa65_pk: pq.publicKeyB64,
+      key_version: 2,
+    }) as T;
+
+  it("says both signatures were checked, the second one post-quantum", async () => {
+    const out = await verifyAgainstChain(JSON.stringify(r), { ...app, registry }, view);
+    expect(out.ok).toBe(true);
+    expect(byId(out).signature.detail).toContain("ML-DSA-65 (FIPS 204, post-quantum)");
+  });
+});

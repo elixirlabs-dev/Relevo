@@ -209,12 +209,16 @@ B,012180001234567899,50,returned,,ACCOUNT_CLOSED
   it("offers the sample payroll receipt only when the site has a registry", () => {
     render(<VerifyView app={app} verify={async () => ok} />);
     expect(
-      screen.queryByRole("button", { name: "Use a payroll receipt made outside the escrow" }),
+      screen.queryByRole("button", {
+        name: "Use a payroll receipt made outside the escrow (post-quantum signed)",
+      }),
     ).toBeNull();
     cleanup();
     render(<VerifyView app={{ ...app, registry: "registry.example.testnet" }} verify={async () => ok} />);
     expect(
-      screen.getByRole("button", { name: "Use a payroll receipt made outside the escrow" }),
+      screen.getByRole("button", {
+        name: "Use a payroll receipt made outside the escrow (post-quantum signed)",
+      }),
     ).toBeTruthy();
   });
 });

@@ -24,6 +24,7 @@ import {
 } from "./direct-receipt.ts";
 import { type Ed25519Key, sign } from "./keys.ts";
 import { LABEL } from "./label.ts";
+import { type MlDsaKey, mldsaSign } from "./pq-keys.ts";
 
 export const MAX_RESULT_ROWS = 500;
 const HEADER = "name,account,amount,status,paid_at,reference";
@@ -137,12 +138,19 @@ export function buildDirectReceipt(rows: ResultRow[], m: DirectMeta): DirectRece
 
 const canonicalBytes = (v: unknown) => Buffer.from(canonicalize(v) ?? "", "utf8");
 
-export function signDirectReceipt(body: DirectReceiptBody, key: Ed25519Key): DirectReceipt {
-  const sig = sign(key, canonicalBytes(body));
-  return {
-    ...body,
-    signatures: [{ alg: "ed25519", public_key: key.publicKeyStr, sig: Buffer.from(sig).toString("base64") }],
-  };
+/** Signs with ed25519, and also with ML-DSA-65 when a post-quantum key is given (same signed bytes). */
+export function signDirectReceipt(body: DirectReceiptBody, key: Ed25519Key, pq?: MlDsaKey): DirectReceipt {
+  const msg = canonicalBytes(body);
+  const signatures: DirectReceipt["signatures"] = [
+    { alg: "ed25519", public_key: key.publicKeyStr, sig: Buffer.from(sign(key, msg)).toString("base64") },
+  ];
+  if (pq)
+    signatures.push({
+      alg: "ml-dsa-65",
+      public_key: pq.publicKeyB64,
+      sig: Buffer.from(mldsaSign(pq, new Uint8Array(msg))).toString("base64"),
+    });
+  return { ...body, signatures };
 }
 
 export function directHashB58(r: DirectReceipt): string {
@@ -160,19 +168,24 @@ interface KeysView {
   mldsa65_pk: string | null;
 }
 
-/** Publishes the issuer's receipt key unless it is already the current one; returns the key version. */
+/**
+ * Publishes the issuer's receipt keys (ed25519, plus ML-DSA-65 if given) unless they are already the
+ * current ones; returns the key version.
+ */
 export async function ensureIssuerKeys(
   view: <T>(contractId: string, method: string, args?: object) => Promise<T>,
   issuer: ChainAccount,
   registry: string,
   key: Ed25519Key,
+  pq?: MlDsaKey,
 ): Promise<number> {
   const cur = await view<KeysView | null>(registry, "get_keys", { issuer: issuer.accountId });
-  if (cur && cur.receipt_pk === key.publicKeyStr && !cur.mldsa65_pk) return cur.version;
+  const pqPk = pq?.publicKeyB64 ?? null;
+  if (cur && cur.receipt_pk === key.publicKeyStr && (cur.mldsa65_pk ?? null) === pqPk) return cur.version;
   const r = await issuer.call(
     registry,
     "set_keys",
-    { receipt_pk: key.publicKeyStr, mldsa65_pk: null },
+    { receipt_pk: key.publicKeyStr, mldsa65_pk: pqPk },
     { gasTgas: 30, depositYocto: KEYS_DEPOSIT },
   );
   return r.value as number;

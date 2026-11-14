@@ -132,3 +132,52 @@ describe("direct receipt CSV", async () => {
     expect(lines[3].endsWith(",7899,,ACCOUNT_CLOSED")).toBe(true);
   });
 });
+
+describe("post-quantum direct receipts (ed25519 + ML-DSA-65)", async () => {
+  const { mldsaFromSeed } = await import("../src/pq-keys.ts");
+  const pq = mldsaFromSeed(new Uint8Array(32).fill(7));
+  const pqOther = mldsaFromSeed(new Uint8Array(32).fill(8));
+  const hybrid = () => {
+    const { rows } = parseResultsCsv(CSV, { rail: "SPEI" });
+    return signDirectReceipt(buildDirectReceipt(rows, meta), key, pq);
+  };
+  const chainKeys = { receipt_pk: key.publicKeyStr, mldsa65_pk: pq.publicKeyB64 };
+
+  it("carries both signatures, and verifies only when both match the keys on-chain", async () => {
+    const r = hybrid();
+    expect(r.signatures.map((s) => s.alg)).toEqual(["ed25519", "ml-dsa-65"]);
+    expect(Buffer.from(r.signatures[1].sig, "base64")).toHaveLength(3309);
+    expect(await verifyDirectSignaturesWeb(r, chainKeys)).toEqual({ ok: true });
+  });
+
+  it("fails when the post-quantum signature alone is tampered with", async () => {
+    const r = hybrid();
+    const sig = Buffer.from(r.signatures[1].sig, "base64");
+    sig[10] ^= 1;
+    r.signatures[1].sig = sig.toString("base64");
+    expect(await verifyDirectSignaturesWeb(r, chainKeys)).toEqual({ ok: false, reason: "bad_signature" });
+  });
+
+  it("fails when an amount is edited", async () => {
+    const r = hybrid();
+    r.payouts[0].amount = "1.00";
+    expect((await verifyDirectSignaturesWeb(r, chainKeys)).ok).toBe(false);
+  });
+
+  it("fails when the post-quantum key on-chain is another one", async () => {
+    expect(
+      await verifyDirectSignaturesWeb(hybrid(), { ...chainKeys, mldsa65_pk: pqOther.publicKeyB64 }),
+    ).toEqual({ ok: false, reason: "key_mismatch" });
+  });
+
+  it("requires the post-quantum signature once the issuer has published a post-quantum key", async () => {
+    expect(await verifyDirectSignaturesWeb(receipt(), chainKeys)).toEqual({ ok: false, reason: "malformed" });
+  });
+
+  it("rejects a post-quantum signature the issuer never published a key for", async () => {
+    expect(await verifyDirectSignaturesWeb(hybrid(), { receipt_pk: key.publicKeyStr })).toEqual({
+      ok: false,
+      reason: "malformed",
+    });
+  });
+});

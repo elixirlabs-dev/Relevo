@@ -91,8 +91,8 @@ export function VerifyView({ app, verify, save = saveFile, print }: VerifyViewPr
             </Button>
           )}
           {app.network === "testnet" && app.registry && (
-            <Button onClick={() => sample("/receipts/testnet-direct-payroll.json")} disabled={busy}>
-              Use a payroll receipt made outside the escrow
+            <Button onClick={() => sample("/receipts/testnet-direct-payroll-pq.json")} disabled={busy}>
+              Use a payroll receipt made outside the escrow (post-quantum signed)
             </Button>
           )}
           <label className="tag">

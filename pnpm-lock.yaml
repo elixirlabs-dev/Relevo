@@ -128,6 +128,9 @@ importers:
 
   packages/shared:
     dependencies:
+      '@noble/post-quantum':
+        specifier: 0.7.1
+        version: 0.7.1
       canonicalize:
         specifier: 5.1.0
         version: 5.1.0

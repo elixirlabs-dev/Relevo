@@ -205,12 +205,15 @@ async function verifyDirect(
   checks.push({
     id: "signature",
     ok: v.ok,
-    detail: signatureDetail(
-      v,
-      filePk,
-      anchor.receipt_pk,
-      `${r.issuer}'s receipt key (version ${anchor.key_version})`,
-    ),
+    detail:
+      v.ok && anchor.mldsa65_pk
+        ? `Signed twice, by ${r.issuer}'s keys on-chain (version ${anchor.key_version}): ed25519 ${anchor.receipt_pk} and ML-DSA-65 (FIPS 204, post-quantum)`
+        : signatureDetail(
+            v,
+            filePk,
+            anchor.receipt_pk,
+            `${r.issuer}'s receipt key (version ${anchor.key_version})`,
+          ),
   });
 
   const hash = await directHashB58Web(r);
