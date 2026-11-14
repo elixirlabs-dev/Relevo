@@ -179,6 +179,12 @@ export function fromUsdcUnits(units: string | bigint): string {
   return `${neg ? "-" : ""}${abs / 1_000_000n}${frac ? `.${frac}` : ""}`;
 }
 
+/** "1500000" → "1.50": the exact amount to send, never fewer than two decimals and never rounded. */
+export function usdcExact(units: string | bigint): string {
+  const [whole, frac = ""] = fromUsdcUnits(units).split(".");
+  return `${whole}.${frac.padEnd(2, "0")}`;
+}
+
 /** The exact body 1Click's POST /v0/quote expects: USDC on the origin chain in, USDC on NEAR out. */
 export function quoteBody(r: FundingRequest, now: number = Date.now()): QuoteRequestBody {
   return {
@@ -260,7 +266,32 @@ export async function quoteFunding(
         ? "1Click's price was incomplete. Try again."
         : "1Click did not return a deposit address. Nothing was reserved; try again.",
     };
+  if (!r.dry) {
+    const changed = mismatch(r, q, (res.data as Partial<QuoteResponse>).quoteRequest ?? {});
+    if (changed)
+      return {
+        ok: false,
+        reason: "bad_response",
+        message: `1Click's quote does not match what you asked for: ${changed}. No deposit address is shown; do not send anything. Try again.`,
+      };
+  }
   return { ok: true, data: res.data as QuoteResponse };
+}
+
+/**
+ * A real quote must be for exactly what was asked: the amount in (EXACT_INPUT), the tokens, the NEAR
+ * account and the refund address. Returns what differs, in words, or null when everything matches.
+ */
+function mismatch(r: FundingRequest, q: Quote, echoed: Record<string, unknown>): string | null {
+  const want = quoteBody(r);
+  if (q.amountIn !== want.amount)
+    return `the amount to send is ${q.amountInFormatted || q.amountIn} USDC, not ${usdcExact(want.amount)}`;
+  if (echoed.originAsset !== want.originAsset || echoed.destinationAsset !== want.destinationAsset)
+    return "the token is different";
+  if (echoed.recipient !== want.recipient) return "the NEAR account that receives the USDC is different";
+  if (typeof echoed.refundTo !== "string" || echoed.refundTo.toLowerCase() !== want.refundTo.toLowerCase())
+    return "the refund address is different";
+  return null;
 }
 
 export const STATUS_TEXT: Record<FundingStatus, string> = {
@@ -268,7 +299,7 @@ export const STATUS_TEXT: Record<FundingStatus, string> = {
   KNOWN_DEPOSIT_TX: "Your deposit transaction has been seen. Waiting for it to confirm.",
   PROCESSING: "Deposit received. 1Click is swapping it and delivering the USDC to NEAR.",
   INCOMPLETE_DEPOSIT:
-    "The deposit is smaller than the quoted amount, so it is not swapped. 1Click returns it to your refund address.",
+    "The deposit is smaller than the quoted amount, so it is not swapped. 1Click should refund it to your refund address.",
   SUCCESS: "Delivered. The USDC is in the NEAR account.",
   REFUNDED: "Refunded. The swap did not go through, and the deposit went back to your refund address.",
   FAILED: "Failed. The swap did not complete. Keep the deposit address: 1Click support can trace it.",
@@ -315,12 +346,19 @@ export function fundingSteps(s: FundingStatus): Array<{ label: string; state: St
   }));
 }
 
-/** GET /v0/status for a deposit address. */
+/**
+ * GET /v0/status for a deposit address (and its memo, when the quote returned one). 1Click answers "not
+ * found" until it has seen something for a fresh address, so that reads as still waiting for the deposit.
+ */
 export async function fundingStatus(
   depositAddress: string,
   fetchImpl: typeof fetch = fetch,
+  depositMemo?: string,
 ): Promise<OneClickResult<StatusResponse>> {
-  const res = await call(fetchImpl, `/v0/status?depositAddress=${encodeURIComponent(depositAddress)}`);
+  const memo = depositMemo ? `&depositMemo=${encodeURIComponent(depositMemo)}` : "";
+  const res = await call(fetchImpl, `/v0/status?depositAddress=${encodeURIComponent(depositAddress)}${memo}`);
+  if (!res.ok && res.reason === "http" && (res.status === 404 || /not found/i.test(res.message)))
+    return { ok: true, data: { status: "PENDING_DEPOSIT" } };
   if (!res.ok) return res;
   const status = (res.data as { status?: unknown }).status;
   if (!isFundingStatus(status))
@@ -378,12 +416,13 @@ export interface ActiveDeposit {
   depositAddress: string;
   depositMemo?: string;
   origin: Origin;
-  /** 6-decimal units. */
+  /** 6-decimal units: the exact amount to send, checked against the request. */
   amountIn: string;
-  amountInFormatted: string;
   amountOutFormatted: string;
   deadline: string;
   recipient: string;
+  /** Origin-chain address that gets the deposit back if the swap does not go through. */
+  refundTo: string;
 }
 
 export const ACTIVE_KEY = "relevo-fund-active";
@@ -405,12 +444,13 @@ export function loadActive(storage: Storage | null): ActiveDeposit | null {
       isStr(a.depositAddress) &&
       typeof a.origin === "string" &&
       Object.hasOwn(FUND_ORIGINS, a.origin) &&
-      isStr(a.amountIn) &&
-      isStr(a.amountInFormatted) &&
+      typeof a.amountIn === "string" &&
+      /^\d+$/.test(a.amountIn) &&
       isStr(a.amountOutFormatted) &&
       isStr(a.deadline) &&
       !Number.isNaN(Date.parse(a.deadline)) &&
-      isStr(a.recipient);
+      isStr(a.recipient) &&
+      isStr(a.refundTo);
     return ok ? (a as ActiveDeposit) : null;
   } catch {
     return null;

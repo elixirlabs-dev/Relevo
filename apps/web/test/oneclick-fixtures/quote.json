@@ -26,7 +26,7 @@
     "amount": "1500000",
     "refundTo": "0x0000000000000000000000000000000000000001",
     "refundType": "ORIGIN_CHAIN",
-    "recipient": "example.near",
+    "recipient": "payroll-treasury.near",
     "recipientType": "DESTINATION_CHAIN",
     "deadline": "2026-11-14T21:22:10.507Z",
     "confidentiality": "public",

@@ -22,6 +22,7 @@ import {
   toUsdcUnits,
   txHashes,
   USDC_NEAR,
+  usdcExact,
   validateFunding,
 } from "../lib/oneclick.ts";
 import dryQuote from "./oneclick-fixtures/dry-quote.json" with { type: "json" };
@@ -135,6 +136,68 @@ describe("quoteFunding", () => {
     expect(r.ok && r.data.quote.deadline).toBe("2026-11-14T21:22:10.507Z");
   });
 
+  it.each([
+    [
+      "the amount",
+      { quote: { ...liveQuote.quote, amountIn: "15000000", amountInFormatted: "15" } },
+      /amount/,
+    ],
+    [
+      "the recipient",
+      { quoteRequest: { ...liveQuote.quoteRequest, recipient: "someone-else.near" } },
+      /NEAR account/,
+    ],
+    [
+      "the refund address",
+      { quoteRequest: { ...liveQuote.quoteRequest, refundTo: "0x00000000000000000000000000000000000000ff" } },
+      /refund address/,
+    ],
+    [
+      "the origin token",
+      {
+        quoteRequest: {
+          ...liveQuote.quoteRequest,
+          originAsset: "nep141:arb-0xaf88d065e77c8cc2239327c5edb3a432268e5831.omft.near",
+        },
+      },
+      /token/,
+    ],
+  ])("refuses a real quote that changed %s", async (_what, patch, words) => {
+    const f = vi.fn(async () => json({ ...liveQuote, ...patch }));
+    const r = await quoteFunding({ ...good, dry: false }, f as unknown as typeof fetch, () => NOW);
+    expect(r).toMatchObject({ ok: false, reason: "bad_response" });
+    expect(!r.ok && r.message).toMatch(words);
+    expect(!r.ok && r.message).toMatch(/do not send/i);
+  });
+
+  it("compares the echoed refund address without letter case", async () => {
+    const f = vi.fn(async () => json(liveQuote));
+    const r = await quoteFunding(
+      { ...good, dry: false, refundTo: "0x000000000000000000000000000000000000000A" },
+      f as unknown as typeof fetch,
+      () => NOW,
+    );
+    expect(r).toMatchObject({ ok: false, reason: "bad_response" });
+    const g = vi.fn(async () =>
+      json({
+        ...liveQuote,
+        quoteRequest: { ...liveQuote.quoteRequest, refundTo: "0x000000000000000000000000000000000000000a" },
+      }),
+    );
+    const s = await quoteFunding(
+      { ...good, dry: false, refundTo: "0x000000000000000000000000000000000000000A" },
+      g as unknown as typeof fetch,
+      () => NOW,
+    );
+    expect(s.ok).toBe(true);
+  });
+
+  it("formats 6-decimal units as the exact amount to send", () => {
+    expect(usdcExact("1500000")).toBe("1.50");
+    expect(usdcExact("100000000")).toBe("100.00");
+    expect(usdcExact("1234567")).toBe("1.234567");
+  });
+
   it("does not call 1Click when the input is invalid", async () => {
     const f = vi.fn();
     const r = await quoteFunding({ ...good, recipient: "nope" }, f as unknown as typeof fetch);
@@ -182,12 +245,33 @@ describe("fundingStatus", () => {
     expect(r.ok && r.data.swapDetails?.amountOutFormatted).toBe("1.49606");
   });
 
-  it("reports a 404 and a network error", async () => {
+  it("adds the deposit memo when the quote had one", async () => {
+    const f = vi.fn(async () => json(statusPending));
+    await fundingStatus("0x5c1e", f as unknown as typeof fetch, "memo 42");
+    expect((f.mock.calls[0] as unknown as [string])[0]).toBe(
+      "https://1click.chaindefuser.com/v0/status?depositAddress=0x5c1e&depositMemo=memo%2042",
+    );
+  });
+
+  it("reads 'not found' as still waiting for the deposit", async () => {
     const notFound = vi.fn(async () => json({ message: "Deposit address 0x1 not found" }, 404));
     expect(await fundingStatus("0x1", notFound as unknown as typeof fetch)).toMatchObject({
+      ok: true,
+      data: { status: "PENDING_DEPOSIT" },
+    });
+    const said = vi.fn(async () => json({ message: "Deposit address 0x1 not found" }, 400));
+    expect(await fundingStatus("0x1", said as unknown as typeof fetch)).toMatchObject({
+      ok: true,
+      data: { status: "PENDING_DEPOSIT" },
+    });
+  });
+
+  it("reports a server error and a network error", async () => {
+    const broken = vi.fn(async () => json({ message: "Internal server error" }, 500));
+    expect(await fundingStatus("0x1", broken as unknown as typeof fetch)).toMatchObject({
       ok: false,
       reason: "http",
-      status: 404,
+      status: 500,
     });
     const down = vi.fn(async () => {
       throw new TypeError("Failed to fetch");
@@ -301,10 +385,10 @@ describe("the active deposit in localStorage", () => {
     depositAddress: "0x5c1e3a7f9b2d4e6081a3c5e7f9b1d3a5c7e9f1b3",
     origin: "base",
     amountIn: "1500000",
-    amountInFormatted: "1.5",
     amountOutFormatted: "1.49606",
     deadline: "2026-11-14T21:22:10.507Z",
     recipient: "payroll-treasury.near",
+    refundTo: "0x0000000000000000000000000000000000000001",
   };
 
   it("saves, loads and clears it", () => {
@@ -339,5 +423,8 @@ describe("the active deposit in localStorage", () => {
     expect(loadActive(null)).toBeNull();
     const junk = { getItem: () => '{"depositAddress":5}' } as unknown as Storage;
     expect(loadActive(junk)).toBeNull();
+    const { refundTo: _, ...noRefund } = active;
+    const old = { getItem: () => JSON.stringify(noRefund) } as unknown as Storage;
+    expect(loadActive(old)).toBeNull();
   });
 });

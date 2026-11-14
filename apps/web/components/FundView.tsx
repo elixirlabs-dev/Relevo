@@ -21,11 +21,15 @@ import {
   saveActive,
   submitDeposit,
   txHashes,
+  usdcExact,
 } from "../lib/oneclick.ts";
 import { Button, Eyebrow, Window } from "./ui.tsx";
 
 export const FUND_MAINNET_WARNING =
   "Mainnet. Real money. This is separate from the testnet demo: USDC arrives in a NEAR mainnet account you choose, not in the testnet escrow.";
+
+export const DEADLINE_PASSED =
+  "Deadline passed. Do not send to this address; funds sent now may be lost. Start over for a new address.";
 
 const local = (): Storage | null => {
   try {
@@ -99,7 +103,7 @@ export function FundView({
     const end = pollingEndsAt(active.deadline);
     const tick = async () => {
       const last = now() > end;
-      const r = await fundingStatus(active.depositAddress, f);
+      const r = await fundingStatus(active.depositAddress, f, active.depositMemo);
       if (!live) return;
       if (r.ok) {
         setStatus(r.data);
@@ -116,6 +120,14 @@ export function FundView({
       clearTimeout(timer);
     };
   }, [active]);
+
+  /** A shown price belongs to the exact inputs it was for: any change drops it. */
+  const edit =
+    <T,>(set: (v: T) => void) =>
+    (v: T) => {
+      set(v);
+      setPrice(null);
+    };
 
   const request = (dry: boolean) => ({ origin, amountUsdc: amount, recipient, refundTo, dry });
 
@@ -141,10 +153,10 @@ export function FundView({
       ...(q.depositMemo ? { depositMemo: q.depositMemo } : {}),
       origin,
       amountIn: q.amountIn,
-      amountInFormatted: q.amountInFormatted,
       amountOutFormatted: q.amountOutFormatted,
       deadline: q.deadline as string,
       recipient: recipient.trim(),
+      refundTo: refundTo.trim(),
     };
     saveActive(store.current, a);
     setPrice(null);
@@ -154,6 +166,7 @@ export function FundView({
 
   const startOver = () => {
     clearActive(store.current);
+    setAck(false);
     setActive(null);
     setStatus(null);
     setStatusError(null);
@@ -204,6 +217,7 @@ export function FundView({
           txNote={txNote}
           onSendTx={sendTx}
           onStartOver={startOver}
+          now={now}
         />
       ) : (
         <Window title="~/fund" status="idle">
@@ -211,14 +225,14 @@ export function FundView({
             <div className="fund-fields">
               <label>
                 <span>Origin chain</span>
-                <select value={origin} onChange={(e) => setOrigin(e.target.value as Origin)}>
+                <select value={origin} onChange={(e) => edit(setOrigin)(e.target.value as Origin)}>
                   <option value="base">USDC on Base</option>
                   <option value="arbitrum">USDC on Arbitrum</option>
                 </select>
               </label>
               <label>
                 <span>Amount of USDC to send</span>
-                <input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
+                <input inputMode="decimal" value={amount} onChange={(e) => edit(setAmount)(e.target.value)} />
               </label>
               <label>
                 <span>NEAR mainnet account that receives the USDC</span>
@@ -226,7 +240,7 @@ export function FundView({
                   value={recipient}
                   placeholder="your-treasury.near"
                   spellCheck={false}
-                  onChange={(e) => setRecipient(e.target.value)}
+                  onChange={(e) => edit(setRecipient)(e.target.value)}
                 />
               </label>
               <label>
@@ -235,13 +249,14 @@ export function FundView({
                   value={refundTo}
                   placeholder="0x…"
                   spellCheck={false}
-                  onChange={(e) => setRefundTo(e.target.value)}
+                  onChange={(e) => edit(setRefundTo)(e.target.value)}
                 />
               </label>
             </div>
             <p className="muted small">
-              From 1 to 100 USDC. If the swap does not go through, 1Click sends the deposit back to the refund
-              address, so use an address you control on {chain}.
+              From 1 to 100 USDC. If a deposit made before the deadline is not swapped, 1Click refunds it to
+              the refund address, so use an address you control on {chain}. Anything sent after the deadline
+              may be lost.
             </p>
             <div className="row">
               <Button variant="secondary" onClick={getPrice} disabled={busy !== null}>
@@ -280,7 +295,7 @@ function Price({ quote: q, chain }: { quote: QuoteResponse; chain: string }) {
       <Eyebrow>Price · nothing reserved yet</Eyebrow>
       <dl className="facts">
         <dt>You send</dt>
-        <dd>{`${q.quote.amountInFormatted} USDC on ${chain}`}</dd>
+        <dd>{`${usdcExact(q.quote.amountIn)} USDC on ${chain}`}</dd>
         <dt>You receive about</dt>
         <dd>{`${q.quote.amountOutFormatted} USDC on NEAR`}</dd>
         <dt>Fees and price difference</dt>
@@ -307,7 +322,9 @@ function Deposit({
   txNote,
   onSendTx,
   onStartOver,
+  now,
 }: {
+  now: () => number;
   active: ActiveDeposit;
   status: StatusResponse | null;
   statusError: string | null;
@@ -327,21 +344,52 @@ function Deposit({
   const originTxs = txHashes(d?.originChainTxHashes);
   const nearTxs = [...new Set([...txHashes(d?.nearTxHashes), ...txHashes(d?.destinationChainTxHashes)])];
   const win = s === "SUCCESS" ? "done" : s === "REFUNDED" || s === "FAILED" ? "offline" : "live";
+
+  // Re-render when the deadline passes, even if no status answer arrives to trigger it.
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const ms = Date.parse(a.deadline) - now();
+    if (ms <= 0) return;
+    const t = setTimeout(() => setTick((x) => x + 1), ms + 50);
+    return () => clearTimeout(t);
+  }, [a.deadline]);
+  /** After the deadline the address is inactive and funds sent to it may be lost: never invite a send. */
+  const expired = now() > Date.parse(a.deadline);
+  const nothingSeen = !status || s === "PENDING_DEPOSIT";
   return (
     <Window title="~/fund/deposit" status={win}>
       <div className="stack">
         <div role="group" aria-label="Deposit" className="stack" style={{ gap: 10 }}>
-          <Eyebrow>{`Deposit address · USDC on ${chain}`}</Eyebrow>
-          <div className="row">
-            <code className="fund-address">{a.depositAddress}</code>
-            <Button variant="secondary" onClick={() => onCopy(a.depositAddress)}>
-              Copy address
-            </Button>
-            {copied !== null && (
-              <span className="muted small">{copied ? "Copied." : "Select the address and copy it."}</span>
-            )}
-          </div>
-          <p className="fund-amount">{`Send exactly ${a.amountInFormatted} USDC on ${chain}`}</p>
+          {expired && nothingSeen ? (
+            <p className="bad" role="alert">
+              <strong>{DEADLINE_PASSED}</strong>
+            </p>
+          ) : (
+            <>
+              <Eyebrow>{`Deposit address · USDC on ${chain}`}</Eyebrow>
+              <div className="row">
+                <code className="fund-address">{a.depositAddress}</code>
+                {!expired && (
+                  <Button variant="secondary" onClick={() => onCopy(a.depositAddress)}>
+                    Copy address
+                  </Button>
+                )}
+                {!expired && copied !== null && (
+                  <span className="muted small">
+                    {copied ? "Copied." : "Select the address and copy it."}
+                  </span>
+                )}
+              </div>
+              {expired ? (
+                <p className="muted">
+                  The deadline has passed. Your deposit was seen and is followed below; do not send anything
+                  more to this address.
+                </p>
+              ) : (
+                <p className="fund-amount">{`Send exactly ${usdcExact(a.amountIn)} USDC on ${chain}`}</p>
+              )}
+            </>
+          )}
           <dl className="facts">
             <dt>Token</dt>
             <dd>{`USDC on ${chain}`}</dd>
@@ -355,11 +403,15 @@ function Deposit({
             <dd>{utc(a.deadline)}</dd>
             <dt>Arrives in</dt>
             <dd>{`${a.recipient} on NEAR mainnet, about ${a.amountOutFormatted} USDC`}</dd>
+            <dt>Refunds</dt>
+            <dd>{`Refunds go to ${a.refundTo} on ${chain}`}</dd>
           </dl>
-          <p className="bad">
-            <strong>Warning: </strong>
-            {`Send only USDC on ${chain}, exactly this amount, before the deadline. Another token, another chain, a different amount or a late deposit is not swapped; 1Click returns what it can to your refund address.`}
-          </p>
+          {!expired && (
+            <p className="bad">
+              <strong>Warning: </strong>
+              {`Send only USDC on ${chain}, exactly this amount, before the deadline. Another token, another chain, a different amount, or anything sent after the deadline may be lost.`}
+            </p>
+          )}
         </div>
 
         <ol className="fund-steps" aria-label="Deposit progress">
@@ -369,7 +421,7 @@ function Deposit({
             </li>
           ))}
         </ol>
-        <p role="status">{describeStatus(s)}</p>
+        {!(expired && nothingSeen) && <p role="status">{describeStatus(s)}</p>}
         {s === "REFUNDED" && d?.refundedAmountFormatted && (
           <p>{`Refunded ${d.refundedAmountFormatted} USDC to your refund address on ${chain}.`}</p>
         )}
@@ -380,8 +432,9 @@ function Deposit({
         {statusError && <p className="bad">{`Could not check the status: ${statusError}`}</p>}
         {stopped && !final && (
           <p className="muted">
-            Stopped checking: the deadline passed more than 10 minutes ago. If you sent USDC and it was not
-            swapped, 1Click returns it to your refund address.
+            Stopped checking: the deadline passed more than 10 minutes ago. Do not send to this address. If
+            you sent USDC before the deadline and it was not swapped, it should be refunded to your refund
+            address; anything sent after the deadline may be lost.
           </p>
         )}
 
@@ -428,7 +481,7 @@ function Deposit({
           <span className="muted small">
             {final
               ? "Clears this deposit from the page."
-              : "Clears this deposit from the page. A deposit you already sent still goes through."}
+              : "Clears this deposit from the page. It does not cancel a deposit you already sent."}
           </span>
         </div>
       </div>
