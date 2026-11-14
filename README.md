@@ -7,6 +7,8 @@
 > **Testnet prototype. Payout firms and SPEI receipts are simulated. Contract unaudited.**
 > Not a money transmitter and not a live service.
 
+**Live demo (read-only, NEAR testnet):** https://relevo-amber.vercel.app
+
 A DAO votes once to pay a batch of contributors in Mexico. The USDC locks in a NEAR escrow, and bonded payout firms deliver. A late firm is rerouted automatically and its bond pays a penalty to the DAO. Every payout ends in a signed receipt, whose hash is anchored on-chain.
 
 **Who it's for.** The demo's funder is a DAO, and that is the only case built and tested. The same pattern fits anyone who has to prove a payout arrived:
@@ -21,20 +23,20 @@ The receipt comes first, and it works without the escrow too: an issuer that pay
 
 No keys, accounts or funds are needed.
 
-1. **See a finished batch on chain.** The reference run (batch 5) is on NEAR testnet. Every step, from the DAO vote to the anchored receipt, is linked in [Reference run, step by step](#reference-run-step-by-step).
-2. **Verify its receipt in your browser.**
+1. **See a finished batch on chain.** Open https://relevo-amber.vercel.app/chain/5: the reference run (batch 5), read straight from the escrow on NEAR testnet. Every step, from the DAO vote to the anchored receipt, is linked in [Reference run, step by step](#reference-run-step-by-step).
+2. **Verify its receipt in your browser.** Open https://relevo-amber.vercel.app/verify and choose "Use the testnet reference receipt (batch 5)". Four checks run in your browser, and all four pass.
+
+   To run the same site locally instead:
 
    ```bash
    git clone https://github.com/elixirlabs-dev/Relevo.git && cd Relevo
    pnpm install
    pnpm web:testnet   # read-only; reads NEAR testnet, signs nothing
    ```
-
-   Open http://localhost:3000/verify and choose "Use the testnet reference receipt (batch 5)". Four checks run in your browser, and all four pass.
 3. **Tamper with it.** Download the [reference receipt](apps/web/public/receipts/testnet-batch-5.json), change any amount, and upload it on the same page. The signature check fails.
 4. **Check a post-quantum receipt for payouts made outside the escrow.** On the same page, choose "Use a payroll receipt made outside the escrow (post-quantum signed)". A sample payroll issuer paid five contractors on its own, then signed the receipt twice, with ed25519 and with ML-DSA-65 (FIPS 204, post-quantum), and anchored it in the receipt registry. The same four checks run against the registry, and both signatures must match the keys the issuer published on-chain.
 
-The same site shows the batch straight from the contract at http://localhost:3000/chain/5 and each firm's bond and record at http://localhost:3000/firms.
+Each firm's bond and on-chain record is at https://relevo-amber.vercel.app/firms.
 
 ## What is real and what is simulated
 
@@ -122,7 +124,7 @@ While the web app runs, logs go to the temp folder `pnpm dev` prints, not to `.d
 
 ## Public read-only site
 
-With no settings at all, the web app runs as a read-only site for the testnet deployment: `/chain/5` (the reference run), `/firms` and `/verify`. There is no router, no signer and no keys. "New batch" is hidden, and `/rpc` only forwards view calls on the escrow.
+Deployed at https://relevo-amber.vercel.app. With no settings at all, the web app runs as a read-only site for the testnet deployment: `/chain/5` (the reference run), `/firms` and `/verify`. There is no router, no signer and no keys. "New batch" is hidden, and `/rpc` only forwards view calls on the escrow and the receipt registry.
 
 - **Vercel:** import the GitHub repo, set **Root Directory** to `apps/web`, and deploy. No environment variables are needed.
 - **Any Node host** (Railway, Render, a VM): run `pnpm install`, then `pnpm --filter @elivo/web build`, then `pnpm --filter @elivo/web start:public`. It listens on `$PORT`.
