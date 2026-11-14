@@ -177,6 +177,8 @@ export function Attestations({
           {atts.map((a) => (
             <li key={a.attester} className="row" style={{ wordBreak: "break-word", gap: 8 }}>
               <span>{`${a.attester} · ${nsToUtc(a.attested_at_ns)}`}</span>
+              {/* The issuer vouching for its own receipt is not an independent check: say so. */}
+              {a.attester === issuer && <Chip tone="peach">Issuer</Chip>}
               {daoRoles(policy, a.attester).map((role) => (
                 <Chip key={role} tone="lavender">{`DAO ${role}`}</Chip>
               ))}

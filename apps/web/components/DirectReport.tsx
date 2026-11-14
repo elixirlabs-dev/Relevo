@@ -10,16 +10,20 @@ function outcome(p: DirectPayout): string {
 }
 
 /**
- * The delivery report for a direct receipt (payouts the issuer made itself, outside the escrow; v1 or v2)
- * that has passed every check on /verify. Prints on its own, like the batch report. Positions are 1-based.
+ * The delivery report for a direct receipt (payouts the issuer made itself, outside the escrow; v1 or v2):
+ * on /verify once every check passes, and on /issue once the receipt is anchored. Prints on its own, like
+ * the batch report. Positions are 1-based.
  */
 export function DirectReport({
   receipt: r,
   hash,
+  checkedBefore = false,
   print = () => window.print(),
 }: {
   receipt: DirectReceipt | DirectReceiptV2;
   hash: string;
+  /** True only when /verify's "checked before payment" check ran and passed for this receipt. */
+  checkedBefore?: boolean;
   print?: () => void;
 }) {
   const paid = r.payouts.filter((p) => p.status === "Paid").length;
@@ -74,9 +78,11 @@ export function DirectReport({
           {"Merkle root "}
           <code style={{ wordBreak: "break-all" }}>{v2.payouts_root}</code>
           {` over the ${v2.payout_count} payouts. The signatures and the anchor cover this root, so each payee can be given a proof of their own payout that shows nobody else's.`}
-          {v2.check_ref
-            ? ` The batch was checked before payment: check report ${v2.check_ref.report_id}.`
-            : " No check made before payment is linked."}
+          {!v2.check_ref
+            ? " No check made before payment is linked."
+            : checkedBefore
+              ? ` The batch was checked before payment: check report ${v2.check_ref.report_id}.`
+              : ` This receipt names check report ${v2.check_ref.report_id}, but it was not shown to be anchored before the receipt.`}
         </p>
       )}
       <p className="small muted">{LABEL}</p>

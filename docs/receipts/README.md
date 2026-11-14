@@ -166,9 +166,9 @@ Payout rows have the same fields as in v1. A payout's `id` is its position (0, 1
 
 Each payee gets their own salt, derived from a per-receipt salt that only the issuer keeps:
 - `payee_salt_i = sha256(receipt_salt ‖ uint32be(i))`;
-- `payee_ref_i = hex(sha256(payee_salt_i ‖ utf8(account)))`.
+- `payee_ref_i = hex(sha256(payee_salt_i ‖ utf8(account)))`, with the account in upper case (a CLABE is unchanged).
 
-A payee proof reveals `payee_salt_i` and nothing else. The other payees' salts can't be derived from it, so a proof doesn't help anyone link the other rows to accounts.
+The payee's salt, together with `payee_ref` and the last 4 digits, lets anyone who holds the link test guesses of that payee's own account number, so treat a payee link like a payslip and share it only with that payee. The other payees' salts can't be derived from it, so a proof doesn't help anyone link the other rows to accounts.
 
 ## Signing and the anchored hash
 
@@ -189,7 +189,7 @@ Because neither the signatures nor the anchor cover the rows directly, the heade
 
 1. Do steps 1 to 3 above, using the proof's `header`.
 2. Recompute the leaf from `payout` and follow `proof.siblings` up to `header.payouts_root`. Check that `payout.id` equals `proof.index`, that the index is below `payout_count`, and that the sides fit that index in a tree of `payout_count` leaves.
-3. **Payee only:** check that `sha256(payee_salt ‖ utf8(your account))` equals `payout.payee_ref` and that `account_last4` matches.
+3. **Payee only:** check that `sha256(payee_salt ‖ utf8(your account, in upper case))` equals `payout.payee_ref` and that `account_last4` matches.
 
 On the command line, either file works. The output names the format:
 
@@ -197,7 +197,7 @@ On the command line, either file works. The output names the format:
 pnpm verify-receipt <receipt.json> --chain --rpc <url> --registry <account>
 # OK (elivo-direct-receipt-2, 5 payouts)
 pnpm verify-receipt <proof.json> --chain --rpc <url> --registry <account> [--account <your CLABE>]
-# OK (elivo-payee-proof-1, payout 3 of 5 in <issuer>/<receipt_id>)
+# OK (elivo-payee-proof-1, payout 5 of 5 in <issuer>/<receipt_id>)
 ```
 
 In code: `packages/shared/src/direct-receipt-v2.ts` and `packages/shared/src/merkle.ts` (both browser-safe).

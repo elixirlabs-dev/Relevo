@@ -138,12 +138,34 @@ export function checkSummaryProblems(r: CheckReportBody): string[] {
 }
 
 const count = (v: unknown) => Number.isInteger(v) && (v as number) >= 0;
+/** Exactly these keys, no more and no fewer (as in the v2 receipt's shape check). */
+const hasKeys = (v: object, keys: string[]) => {
+  const k = Object.keys(v);
+  return k.length === keys.length && keys.every((x) => Object.hasOwn(v, x));
+};
+const ROW_KEYS = ["id", "payee_ref", "account_last4", "bank", "amount", "findings"];
+const SUMMARY_KEYS = ["rows", "blocked", "warned", "clean"];
+const REPORT_KEYS = [
+  "version",
+  "label",
+  "network",
+  "registry",
+  "issuer",
+  "report_id",
+  "checked_at",
+  "rail",
+  "engine",
+  "rows",
+  "summary",
+  "signatures",
+];
 
 function isRow(v: unknown): v is CheckReportRow {
   const x = v as CheckReportRow | null;
   return (
     !!x &&
     typeof x === "object" &&
+    hasKeys(x, ROW_KEYS) &&
     count(x.id) &&
     typeof x.payee_ref === "string" &&
     /^[0-9a-f]{64}$/.test(x.payee_ref) &&
@@ -162,6 +184,7 @@ const isSignature = (v: unknown) => {
   return (
     !!x &&
     typeof x === "object" &&
+    hasKeys(x, ["alg", "public_key", "sig"]) &&
     typeof x.alg === "string" &&
     typeof x.public_key === "string" &&
     typeof x.sig === "string"
@@ -175,6 +198,7 @@ export function isCheckReport(v: unknown): v is CheckReport {
   return (
     !!r &&
     typeof r === "object" &&
+    hasKeys(r, REPORT_KEYS) &&
     r.version === CHECK_VERSION &&
     typeof r.label === "string" &&
     typeof r.network === "string" &&
@@ -189,6 +213,7 @@ export function isCheckReport(v: unknown): v is CheckReport {
     r.rows.every(isRow) &&
     !!s &&
     typeof s === "object" &&
+    hasKeys(s, SUMMARY_KEYS) &&
     count(s.rows) &&
     count(s.blocked) &&
     count(s.warned) &&

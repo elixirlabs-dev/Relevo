@@ -113,6 +113,24 @@ describe("check report", () => {
     expect(bad((r) => Object.assign(r.signatures, [null]))).toBe(false);
   });
 
+  it("rejects a report with a field it doesn't define, at any level, or a missing one", () => {
+    const bad = (f: (r: ReturnType<typeof signCheckReport>) => void) => {
+      const r = structuredClone(signCheckReport(body(), edSeed, pq));
+      f(r);
+      return isCheckReport(r);
+    };
+    expect(bad(() => {})).toBe(true);
+    expect(bad((r) => Object.assign(r, { note: "x" }))).toBe(false);
+    expect(bad((r) => Object.assign(r.rows[0], { name: "Lucía Fernández" }))).toBe(false);
+    expect(bad((r) => Object.assign(r.summary, { extra: 0 }))).toBe(false);
+    expect(bad((r) => Object.assign(r.signatures[0], { note: "x" }))).toBe(false);
+    expect(
+      bad((r) => {
+        delete (r as Partial<typeof r>).label;
+      }),
+    ).toBe(false);
+  });
+
   it("has a summary a verifier can recompute from the rows", () => {
     const r = signCheckReport(body(), edSeed);
     expect(checkSummaryProblems(r)).toEqual([]);

@@ -2,7 +2,7 @@ import { isPayeeProof, payeeRefMatches, verifyPayeeProofStructure } from "@elivo
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IssueView } from "../components/IssueView.tsx";
-import { recordAnchoredCheck } from "../lib/check.ts";
+import { lastAnchoredCheck, recordAnchoredCheck } from "../lib/check.ts";
 import { PENDING_KEY } from "../lib/issue.ts";
 import { listIssued } from "../lib/receipt-store.ts";
 import { decodeShare } from "../lib/share.ts";
@@ -224,14 +224,55 @@ describe("IssueView", () => {
     await screen.findByText("Anchored and verified against the chain");
     expect(
       screen.getByText(
-        /✓ Checked before payment: A check report with this hash was anchored at 2026-11-14 12:00:00 UTC/,
+        "✓ Checked before payment: The issuer anchored check check-20261114-115900 (hash CheckHash1) at 2026-11-14 12:00:00 UTC, before this receipt (anchored 2026-11-14 12:01:00 UTC)",
       ),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/The batch was checked before payment: check report check-20261114-115900\./),
     ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Download receipt (auditor copy)" }));
     expect(JSON.parse(saved[0].text).check_ref).toEqual({
       report_id: "check-20261114-115900",
       report_hash: "CheckHash1",
     });
+    // Linked and anchored: the check is used up, so the next receipt doesn't name it too.
+    expect(lastAnchoredCheck("alice.testnet", localStorage)).toBeNull();
+    expect(screen.getByText(/No check anchored from this browser for alice.testnet is waiting/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Receipt id"), { target: { value: "dec-v2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Sign and anchor the receipt" }));
+    await waitFor(() => expect(listIssued("alice.testnet", localStorage)).toHaveLength(2));
+    expect(
+      listIssued("alice.testnet", localStorage).find((r) => r.receipt_id === "dec-v2")?.receipt.check_ref,
+    ).toBeNull();
+  });
+
+  it("doesn't call the batch checked before payment when the linked check fails on /verify", async () => {
+    const c = fakeChain();
+    // Anchored on-chain, but with another hash than the one this browser recorded.
+    c.anchorNow("check-20261114-115900", "OtherHash");
+    recordAnchoredCheck(
+      "alice.testnet",
+      { report_id: "check-20261114-115900", hash: "CheckHash1", checked_at: "2026-11-14T11:59:00.000Z" },
+      localStorage,
+    );
+    render(
+      <IssueView
+        cfg={cfg}
+        wallet={{ port: port("alice.testnet", c.apply), wallets }}
+        view={c.view}
+        retryMs={1}
+      />,
+    );
+    await screen.findByText(/Linked to check check-20261114-115900 anchored at/);
+    fireEvent.click(screen.getByRole("button", { name: "Sign and anchor the receipt" }));
+    expect(await screen.findByText(/✗ Checked before payment/)).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Delivery report" })).toBeTruthy();
+    expect(screen.queryByText(/The batch was checked before payment/)).toBeNull();
+    expect(
+      screen.getByText(
+        /This receipt names check report check-20261114-115900, but it was not shown to be anchored/,
+      ),
+    ).toBeTruthy();
   });
 
   it("leaves the check out when asked", async () => {
@@ -258,6 +299,8 @@ describe("IssueView", () => {
     expect(screen.queryByText(/Checked before payment/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Download receipt (auditor copy)" }));
     expect(JSON.parse(saved[0].text).check_ref).toBeNull();
+    // Not linked, so not used up.
+    expect(lastAnchoredCheck("alice.testnet", localStorage)?.report_id).toBe("check-20261114-115900");
   });
 
   it("doesn't link, by default, a check the registry has no anchor for, and says why", async () => {

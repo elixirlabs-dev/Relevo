@@ -15,6 +15,8 @@ import { decodePayeeLink, type PayeeCheck, type PayeeOutcome, verifyPayeeProof }
 import { Button, Chip, Eyebrow, Sticker, Window } from "./ui.tsx";
 
 const SAMPLE_PATH = "/receipts/testnet-payee-proof-v2.json";
+/** The sample link's payee account (invented sample data), so a visitor can try the confirm. */
+const SAMPLE_ACCOUNT = "646180005555555554";
 
 type View = <T>(contractId: string, method: string, args?: object) => Promise<T>;
 type Confirm = "match" | "no_match" | "length" | null;
@@ -72,7 +74,7 @@ export function PayeeView({ app, view, fragment }: PayeeViewProps) {
   const [outcome, setOutcome] = useState<PayeeOutcome | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [clabe, setClabe] = useState("");
+  const [typed, setTyped] = useState("");
   const [confirm, setConfirm] = useState<Confirm>(null);
   /** Bumped by every proof opened: a verdict only shows if its run is still the latest. */
   const runId = useRef(0);
@@ -85,7 +87,7 @@ export function PayeeView({ app, view, fragment }: PayeeViewProps) {
     setIsSample(sample);
     setOutcome(null);
     setError(null);
-    setClabe("");
+    setTyped("");
     setConfirm(null);
     setBusy(true);
     try {
@@ -140,11 +142,15 @@ export function PayeeView({ app, view, fragment }: PayeeViewProps) {
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
+  const spei = proof?.header.rail.toUpperCase() === "SPEI";
+  const rail = spei ? t.spei : t.other;
+
   const check = () => {
     if (!proof) return;
-    const digits = clabe.replace(/[\s-]/g, "");
-    if (!/^\d{18}$/.test(digits)) setConfirm("length");
-    else setConfirm(payeeRefMatches(proof, digits) ? "match" : "no_match");
+    // Spaces and dashes dropped, upper case: the account as /issue hashed it into payee_ref.
+    const account = typed.replace(/[\s-]/g, "").toUpperCase();
+    if (!(spei ? /^\d{18}$/ : /^[A-Z0-9]{4,34}$/).test(account)) setConfirm("length");
+    else setConfirm(payeeRefMatches(proof, account) ? "match" : "no_match");
   };
 
   const pay = proof?.payout;
@@ -208,7 +214,7 @@ export function PayeeView({ app, view, fragment }: PayeeViewProps) {
               </dd>
               <dt>{t.paidAt}</dt>
               <dd>{pay.paid_at ? formatWhen(pay.paid_at, lang) : "—"}</dd>
-              <dt>{t.reference}</dt>
+              <dt>{rail.reference}</dt>
               <dd>{pay.reference ?? "—"}</dd>
               <dt>{t.account}</dt>
               <dd>{t.accountEnding(pay.account_last4)}</dd>
@@ -262,7 +268,8 @@ export function PayeeView({ app, view, fragment }: PayeeViewProps) {
           <h2 className="small" style={{ marginTop: 0 }}>
             {t.confirmTitle}
           </h2>
-          <p className="small">{t.confirmHelp}</p>
+          <p className="small">{rail.confirmHelp}</p>
+          {isSample && <p className="small">{t.sampleAccount(SAMPLE_ACCOUNT)}</p>}
           <form
             className="row"
             onSubmit={(e) => {
@@ -271,28 +278,33 @@ export function PayeeView({ app, view, fragment }: PayeeViewProps) {
             }}
           >
             <label className="tag">
-              {t.clabeLabel}{" "}
+              {rail.accountLabel}{" "}
               <input
-                value={clabe}
-                inputMode="numeric"
+                value={typed}
+                inputMode={spei ? "numeric" : "text"}
+                autoCapitalize={spei ? undefined : "characters"}
                 autoComplete="off"
                 spellCheck={false}
-                maxLength={24}
+                maxLength={spei ? 24 : 48}
                 onChange={(e) => {
-                  setClabe(e.target.value);
+                  setTyped(e.target.value);
                   setConfirm(null);
                 }}
               />
             </label>
-            <Button variant="dark" onClick={check} disabled={!clabe.trim()}>
+            <Button variant="dark" onClick={check} disabled={!typed.trim()}>
               {t.confirmButton}
             </Button>
           </form>
-          {confirm === "match" && (
-            <p className="ok" role="status">
-              {t.match}
-            </p>
-          )}
+          {/* A match only earns a ✓ and the ok colour under a verified receipt: a forged link can name any account. */}
+          {confirm === "match" &&
+            (outcome?.ok ? (
+              <p className="ok" role="status">
+                {rail.match}
+              </p>
+            ) : (
+              <p role="status">{t.matchUnverified}</p>
+            ))}
           {confirm === "no_match" && (
             <p className="bad" role="status">
               {t.noMatch(pay.account_last4)}
@@ -300,7 +312,7 @@ export function PayeeView({ app, view, fragment }: PayeeViewProps) {
           )}
           {confirm === "length" && (
             <p className="bad" role="status">
-              {`✗ ${t.clabeLength}`}
+              {`✗ ${rail.length}`}
             </p>
           )}
         </Sticker>

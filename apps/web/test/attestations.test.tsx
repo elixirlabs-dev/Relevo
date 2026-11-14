@@ -97,6 +97,19 @@ describe("Attestations", () => {
     });
   });
 
+  it("marks the issuer's own attestation with an Issuer chip, so it doesn't read as independent", async () => {
+    const c = fakeChain([
+      { attester: ISSUER, attested_at_ns: NS },
+      { attester: "auditor.testnet", attested_at_ns: NS },
+    ]);
+    render(<Attestations {...props} view={c.view} wallet={{ port: c.port(null), wallets }} />);
+    const own = (await screen.findByText(`${ISSUER} · 2026-11-14 12:00:00 UTC`)).closest("li") as HTMLElement;
+    expect(own.textContent).toContain("Issuer");
+    expect(screen.getAllByText("Issuer")).toHaveLength(1);
+    const other = screen.getByText("auditor.testnet · 2026-11-14 12:00:00 UTC").closest("li") as HTMLElement;
+    expect(other.textContent).not.toContain("Issuer");
+  });
+
   it("lists attesters without chips when the policy read fails", async () => {
     const c = fakeChain([{ attester: COUNCIL, attested_at_ns: NS }], new Error("view get_policy: 403"));
     render(<Attestations {...props} view={c.view} wallet={{ port: c.port(null), wallets }} />);

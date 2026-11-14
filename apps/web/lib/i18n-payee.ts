@@ -5,6 +5,15 @@ export const LANG_KEY = "elivo-payee-lang";
 
 type Status = "Paid" | "Returned" | "Failed";
 
+/** The words that depend on the rail: a CLABE and a SPEI tracking key on SPEI, plainer words elsewhere. */
+export interface RailWords {
+  reference: string;
+  accountLabel: string;
+  confirmHelp: string;
+  match: string;
+  length: string;
+}
+
 export interface PayeeText {
   locale: string;
   langLabel: string;
@@ -16,6 +25,8 @@ export interface PayeeText {
   broken: string;
   sample: string;
   sampleNote: string;
+  /** Which invented account to type to try the confirm on the sample link. */
+  sampleAccount: (account: string) => string;
   sampleError: (msg: string) => string;
   loading: string;
   checking: string;
@@ -25,7 +36,6 @@ export interface PayeeText {
   status: string;
   statusWord: Record<Status, string>;
   paidAt: string;
-  reference: string;
   account: string;
   accountEnding: (last4: string) => string;
   issuer: string;
@@ -46,12 +56,12 @@ export interface PayeeText {
   footnote: (registry: string, network: string) => string;
   noRegistry: string;
   confirmTitle: string;
-  confirmHelp: string;
-  clabeLabel: string;
   confirmButton: string;
-  match: string;
+  /** The account matches, but the receipt isn't verified: no mark, no colour. */
+  matchUnverified: string;
   noMatch: (last4: string) => string;
-  clabeLength: string;
+  spei: RailWords;
+  other: RailWords;
 }
 
 export const PAYEE_TEXT: Record<Lang, PayeeText> = {
@@ -67,6 +77,7 @@ export const PAYEE_TEXT: Record<Lang, PayeeText> = {
     broken: "This link is broken or incomplete: ask whoever sent it to send it again.",
     sample: "See a sample payee link",
     sampleNote: "Sample link: invented payroll data, anchored on NEAR testnet.",
+    sampleAccount: (account) => `To try it on this sample, type ${account} (invented sample data).`,
     sampleError: (msg) => `Could not load the sample: ${msg}`,
     loading: "Loading…",
     checking: "Checking against NEAR…",
@@ -76,7 +87,6 @@ export const PAYEE_TEXT: Record<Lang, PayeeText> = {
     status: "Status",
     statusWord: { Paid: "Paid", Returned: "Returned", Failed: "Failed" },
     paidAt: "Paid at",
-    reference: "SPEI tracking key (simulated)",
     account: "Account",
     accountEnding: (last4) => `ending in ${last4}`,
     issuer: "Paid by (NEAR account)",
@@ -85,7 +95,7 @@ export const PAYEE_TEXT: Record<Lang, PayeeText> = {
     checksTitle: "Checks",
     signatureOk: (issuer) => `Signed by ${issuer}'s key on NEAR`,
     signatureBad: (issuer) => `Not signed by ${issuer}'s key on NEAR`,
-    anchorOk: (when) => `Anchored on NEAR at ${when}`,
+    anchorOk: (when) => `Anchored on NEAR on ${when}`,
     anchorBad: "Not anchored on NEAR as this link says",
     merkleOk: (n) => `Your payout is one of ${n} in this receipt`,
     merkleBad: "Your payout doesn't match this receipt: the link was changed",
@@ -97,13 +107,25 @@ export const PAYEE_TEXT: Record<Lang, PayeeText> = {
       `Checked against ${registry} on ${network}: the payer's keys and the anchored record come from the chain, never from the link.`,
     noRegistry: "This app has no receipt registry configured, so it cannot check payee links.",
     confirmTitle: "Confirm it's your account",
-    confirmHelp:
-      "Type your CLABE. It is checked here in your browser: it is never sent anywhere and never stored.",
-    clabeLabel: "Your CLABE (18 digits)",
     confirmButton: "Check my account",
-    match: "✓ This is your account: the payout went to this CLABE",
+    matchUnverified: "This link names your account, but the receipt is not verified on NEAR",
     noMatch: (last4) => `✗ Not this account: this payout went to an account ending in ${last4}`,
-    clabeLength: "A CLABE has 18 digits.",
+    spei: {
+      reference: "SPEI tracking key (simulated)",
+      accountLabel: "Your CLABE (18 digits)",
+      confirmHelp:
+        "Type your CLABE. It is checked here in your browser: it is never sent anywhere and never stored.",
+      match: "✓ This is your account: the payout went to this CLABE",
+      length: "A CLABE has 18 digits.",
+    },
+    other: {
+      reference: "Payment reference",
+      accountLabel: "Your account number (4 to 34 letters or digits)",
+      confirmHelp:
+        "Type your account number. It is checked here in your browser: it is never sent anywhere and never stored.",
+      match: "✓ This is your account: the payout went to this account number",
+      length: "An account number has 4 to 34 letters or digits.",
+    },
   },
   es: {
     locale: "es-MX",
@@ -117,6 +139,8 @@ export const PAYEE_TEXT: Record<Lang, PayeeText> = {
     broken: "Este enlace está roto o incompleto: pide que te lo vuelvan a mandar.",
     sample: "Ver un enlace de ejemplo",
     sampleNote: "Enlace de ejemplo: datos de nómina inventados, registrados en NEAR testnet.",
+    sampleAccount: (account) =>
+      `Para probarlo con este ejemplo, escribe ${account} (es un dato de ejemplo inventado).`,
     sampleError: (msg) => `No se pudo cargar el ejemplo: ${msg}`,
     loading: "Cargando…",
     checking: "Revisando en NEAR…",
@@ -126,13 +150,12 @@ export const PAYEE_TEXT: Record<Lang, PayeeText> = {
     status: "Estado",
     statusWord: { Paid: "Pagado", Returned: "Devuelto", Failed: "No se pudo pagar" },
     paidAt: "Fecha de pago",
-    reference: "Clave de rastreo SPEI (simulada)",
     account: "Cuenta",
     accountEnding: (last4) => `con terminación ${last4}`,
     issuer: "Pagado por (cuenta de NEAR)",
     receipt: "Recibo",
     position: (i, n) => `pago ${i} de ${n}`,
-    checksTitle: "Revisiones",
+    checksTitle: "Verificaciones",
     signatureOk: (issuer) => `Firmado con la llave de ${issuer} en NEAR`,
     signatureBad: (issuer) => `No está firmado con la llave de ${issuer} en NEAR`,
     anchorOk: (when) => `Registrado en NEAR el ${when}`,
@@ -148,13 +171,25 @@ export const PAYEE_TEXT: Record<Lang, PayeeText> = {
     noRegistry:
       "Esta app no tiene un registro de recibos configurado, así que no puede revisar enlaces de pago.",
     confirmTitle: "Confirma que es tu cuenta",
-    confirmHelp:
-      "Escribe tu CLABE. Se revisa aquí, en tu navegador: nunca se envía a ningún lado ni se guarda.",
-    clabeLabel: "Tu CLABE (18 dígitos)",
     confirmButton: "Revisar mi cuenta",
-    match: "✓ Es tu cuenta: el pago se hizo a esta CLABE",
+    matchUnverified: "Este enlace menciona tu cuenta, pero el recibo no está verificado en NEAR",
     noMatch: (last4) => `✗ No es esta cuenta: este pago se hizo a una cuenta con terminación ${last4}`,
-    clabeLength: "Una CLABE tiene 18 dígitos.",
+    spei: {
+      reference: "Clave de rastreo SPEI (simulada)",
+      accountLabel: "Tu CLABE (18 dígitos)",
+      confirmHelp:
+        "Escribe tu CLABE. Se revisa aquí, en tu navegador: nunca se envía a ningún lado ni se guarda.",
+      match: "✓ Es tu cuenta: el pago se hizo a esta CLABE",
+      length: "Una CLABE tiene 18 dígitos.",
+    },
+    other: {
+      reference: "Referencia del pago",
+      accountLabel: "Tu número de cuenta (de 4 a 34 letras o dígitos)",
+      confirmHelp:
+        "Escribe tu número de cuenta. Se revisa aquí, en tu navegador: nunca se envía a ningún lado ni se guarda.",
+      match: "✓ Es tu cuenta: el pago se hizo a este número de cuenta",
+      length: "Un número de cuenta tiene de 4 a 34 letras o dígitos.",
+    },
   },
 };
 

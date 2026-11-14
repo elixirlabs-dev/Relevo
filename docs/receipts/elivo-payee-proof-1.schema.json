@@ -61,7 +61,7 @@
     },
     "payee_salt": {
       "$ref": "#/$defs/hex32",
-      "description": "payee_salt_i = sha256(receipt_salt ‖ uint32be(i)); payee_ref = sha256(payee_salt ‖ utf8(account))."
+      "description": "payee_salt_i = sha256(receipt_salt ‖ uint32be(i)); payee_ref = sha256(payee_salt ‖ utf8(account in upper case))."
     }
   },
   "$defs": {

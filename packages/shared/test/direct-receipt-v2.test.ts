@@ -225,6 +225,27 @@ describe("elivo-payee-proof-1", () => {
     }
   });
 
+  it("matches an account on another rail whatever its letter case, as /issue built it in upper case", () => {
+    const csv =
+      "name,account,amount,status,paid_at,reference\nA,de89370400440532013000,10.00,paid,2026-11-14T10:00:00Z,R1\nB,Gb29Nwbk60161331926819,20.00,paid,2026-11-14T10:00:00Z,R2\n";
+    const parsed = parseResultsCsv(csv, { rail: "SEPA" });
+    expect(parsed.errors).toEqual([]);
+    const sepa = signDirectReceiptV2(
+      buildDirectReceiptV2(parsed.rows, { ...meta, rail: "SEPA", currency: "EUR" }),
+      key.seed,
+    );
+    const upper = ["DE89370400440532013000", "GB29NWBK60161331926819"];
+    sepa.payouts.forEach((p, i) => {
+      expect(p.payee_ref).toBe(
+        bytesToHex(sha256(concatBytes(payeeSalt(receiptSalt, i), new TextEncoder().encode(upper[i])))),
+      );
+    });
+    const p = payeeProof(sepa, 1, receiptSalt);
+    for (const typed of ["GB29NWBK60161331926819", "gb29nwbk60161331926819", "Gb29Nwbk60161331926819"])
+      expect(payeeRefMatches(p, typed), typed).toBe(true);
+    expect(payeeRefMatches(p, "DE89370400440532013000")).toBe(false);
+  });
+
   it("fails when tampered with", () => {
     const r = receipt();
     const good = payeeProof(r, 2, receiptSalt);
@@ -336,7 +357,7 @@ describe("verify-receipt with v2 receipts and payee proofs", () => {
     const pf = write("p.json", payeeProof(r, 3, receiptSalt));
     expect(await cli(pf, "--pubkey", key.publicKeyStr)).toEqual({
       code: 0,
-      out: `OK (elivo-payee-proof-1, payout 3 of 5 in ${meta.issuer}/${meta.receipt_id})`,
+      out: `OK (elivo-payee-proof-1, payout 4 of 5 in ${meta.issuer}/${meta.receipt_id})`,
     });
     expect((await cli(pf, "--pubkey", key.publicKeyStr, "--account", ACCOUNTS[3])).code).toBe(0);
     expect(await cli(pf, "--pubkey", key.publicKeyStr, "--account", ACCOUNTS[1])).toEqual({
@@ -377,7 +398,7 @@ describe("verify-receipt with v2 receipts and payee proofs", () => {
     anchored = { receipt_id: meta.receipt_id, view };
     expect(await cli(rf, ...chainArgs)).toEqual({ code: 0, out: "OK (elivo-direct-receipt-2, 5 payouts)" });
     expect((await cli(pf, ...chainArgs)).out).toBe(
-      `OK (elivo-payee-proof-1, payout 0 of 5 in ${meta.issuer}/${meta.receipt_id})`,
+      `OK (elivo-payee-proof-1, payout 1 of 5 in ${meta.issuer}/${meta.receipt_id})`,
     );
     expect(await cli(rf, "--pubkey", key.publicKeyStr)).toEqual({
       code: 1,

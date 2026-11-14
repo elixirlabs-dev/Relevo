@@ -3,7 +3,7 @@
  * parses the payout results, signs an elivo-direct-receipt-2 with the visitor's own receipt keys
  * (ed25519, plus ML-DSA-65 if chosen), and builds one transaction to the registry: publish the keys if
  * they changed, then anchor the receipt. The receipt points at the last check this browser anchored
- * (`check_ref`), unless told not to. Names, account numbers and the receipt salt never leave the browser.
+ * (`check_ref`) and no anchored receipt has linked yet, unless told not to. Names, account numbers and the receipt salt never leave the browser.
  */
 
 import { CHECK_REPORT_ID } from "@elivo/shared/check-report";

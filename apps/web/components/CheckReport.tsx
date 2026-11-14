@@ -15,6 +15,7 @@ export function FindingChip({ level, text }: { level: CheckLevel; text: string }
 /**
  * A check report that has passed every check on /verify: which checks the issuer ran on a batch before
  * paying it, and what they found. It names no payee. Prints on its own, like the delivery reports.
+ * Positions are 1-based.
  */
 export function CheckReportSheet({
   report: r,
@@ -55,7 +56,7 @@ export function CheckReportSheet({
           <tbody>
             {r.rows.map((row) => (
               <tr key={row.id}>
-                <td>{row.id}</td>
+                <td>{row.id + 1}</td>
                 <td>{`account ****${row.account_last4}`}</td>
                 <td>{row.bank ?? "-"}</td>
                 <td>{row.amount}</td>

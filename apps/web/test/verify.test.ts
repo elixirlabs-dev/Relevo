@@ -504,7 +504,7 @@ C,032180000118359719,25,paid,2026-11-14T10:01:00Z,R3
       ["checked_before", true],
     ]);
     expect(byId(r).checked_before.detail).toBe(
-      "A check report with this hash was anchored at 2026-11-14 11:00:00 UTC, before the receipt (2026-11-14 12:00:00 UTC)",
+      `The issuer anchored check ${CHECK_ID} (hash ${CHECK_HASH}) at 2026-11-14 11:00:00 UTC, before this receipt (anchored 2026-11-14 12:00:00 UTC)`,
     );
     expect(r.ok).toBe(true);
     expect(c.calls[1]).toEqual({

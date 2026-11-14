@@ -164,7 +164,8 @@ export function checkBatch(
       add("name_multiple_accounts", "warn", "This payee name appears with different accounts in this batch.");
     if (med !== null && validAmount(r.amount) && Number(r.amount) > 3 * med)
       add("amount_outlier", "warn", "This amount is more than three times the typical amount in the batch.");
-    const last = key ? opts.history?.[key] : undefined;
+    // Own keys only: a payee named "constructor" must not read Object.prototype as last time's account.
+    const last = key && opts.history && Object.hasOwn(opts.history, key) ? opts.history[key] : undefined;
     if (last !== undefined && last !== r.account)
       add(
         "account_changed",

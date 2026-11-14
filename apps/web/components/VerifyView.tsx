@@ -251,7 +251,12 @@ export function VerifyView({ app, verify, save = saveFile, print, fragment, copy
             </Button>
           </div>
           <ShareLink text={text} copy={copy} />
-          <DirectReport receipt={d} hash={outcome.hash} print={print} />
+          <DirectReport
+            receipt={d}
+            hash={outcome.hash}
+            checkedBefore={outcome.checks.some((c) => c.id === "checked_before" && c.ok)}
+            print={print}
+          />
         </div>
       )}
 

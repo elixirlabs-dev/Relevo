@@ -10,8 +10,8 @@
  * - Anchored hash: base58(sha256(canonical JSON of header + `signatures`)), i.e. the receipt without
  *   `payouts`.
  * - Payee refs: payee_salt_i = sha256(receipt_salt ‖ uint32be(i)), payee_ref_i =
- *   hex(sha256(payee_salt_i ‖ utf8(account))). The issuer keeps receipt_salt; a payee proof reveals
- *   only its own payee_salt.
+ *   hex(sha256(payee_salt_i ‖ utf8(upper-case account))). The issuer keeps receipt_salt; a payee proof
+ *   reveals its own payee_salt, which lets whoever holds the proof test guesses of that payee's account.
  *
  * The keys to verify against always come from the registry, never from the file.
  */
@@ -98,8 +98,13 @@ export function payeeSalt(receiptSalt: Uint8Array, index: number): Uint8Array {
   return sha256(concatBytes(receiptSalt, u32be(index)));
 }
 
+/**
+ * Accounts are hashed in upper case (a no-op for a CLABE), so a payee who types their IBAN in lower case
+ * still matches the row /issue built.
+ */
+const normAccount = (account: string) => account.toUpperCase();
 const payeeRef = (salt: Uint8Array, account: string) =>
-  bytesToHex(sha256(concatBytes(salt, enc.encode(account))));
+  bytesToHex(sha256(concatBytes(salt, enc.encode(normAccount(account)))));
 
 export function buildDirectReceiptV2(
   rows: ResultRow[],
@@ -111,7 +116,7 @@ export function buildDirectReceiptV2(
   const payouts: DirectPayout[] = rows.map((r, id) => ({
     id,
     payee_ref: payeeRef(payeeSalt(m.salt, id), r.account),
-    account_last4: r.account.slice(-4),
+    account_last4: normAccount(r.account).slice(-4),
     amount: r.amount,
     status: r.status,
     paid_at: r.paid_at,
@@ -375,7 +380,7 @@ export function payeeRefMatches(p: PayeeProof, account: string): boolean {
   if (!HEX32.test(p.payee_salt)) return false;
   return (
     payeeRef(hexToBytes(p.payee_salt), account) === p.payout.payee_ref &&
-    account.slice(-4) === p.payout.account_last4
+    normAccount(account).slice(-4) === p.payout.account_last4
   );
 }
 

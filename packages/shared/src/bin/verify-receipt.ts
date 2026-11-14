@@ -147,7 +147,7 @@ async function verifyPayeeProof(p: PayeeProof) {
   if (account !== undefined && !payeeRefMatches(p, account)) fail("payee_ref_mismatch");
   const h = p.header;
   console.log(
-    `OK (${PAYEE_PROOF}, payout ${p.proof.index} of ${h.payout_count} in ${h.issuer}/${h.receipt_id})`,
+    `OK (${PAYEE_PROOF}, payout ${p.proof.index + 1} of ${h.payout_count} in ${h.issuer}/${h.receipt_id})`,
   );
 }
 

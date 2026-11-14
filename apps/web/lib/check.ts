@@ -141,7 +141,7 @@ export function runCheck(
     const key = normaliseName(r?.name ?? "");
     if (!r || !key || c.findings.some((f) => f.level === "block")) return;
     accept[key] = r.account;
-    if (!(key in history) && !(key in added)) added[key] = r.account;
+    if (!Object.hasOwn(history, key) && !Object.hasOwn(added, key)) added[key] = r.account;
   });
   if (!sample && Object.keys(added).length) acceptHistory(input.account, added, storage);
   return { ok: true, result, rows: parsed.rows, checkedAt: new Date().toISOString(), accept };
@@ -209,6 +209,23 @@ export function lastAnchoredCheck(
     typeof v.checked_at === "string"
     ? { report_id: v.report_id, hash: v.hash, checked_at: v.checked_at }
     : null;
+}
+
+/**
+ * A receipt that links `ref` is anchored: that check is used up, so forget it unless a newer check has
+ * replaced it. Otherwise one check would be linked to every later receipt from this browser.
+ */
+export function clearLinkedCheck(
+  account: string,
+  ref: { report_id: string; report_hash: string } | null,
+  storage: Storage | null,
+) {
+  if (!ref) return;
+  const last = lastAnchoredCheck(account, storage);
+  if (!last || last.report_id !== ref.report_id || last.hash !== ref.report_hash) return;
+  try {
+    storage?.removeItem(lastKey(account));
+  } catch {}
 }
 
 export function recordAnchoredCheck(

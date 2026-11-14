@@ -315,6 +315,9 @@ describe("VerifyView with a check report", async () => {
       screen.getByText(/check-20261114-120000 · checked by payroll.example.testnet · SPEI/),
     ).toBeTruthy();
     expect(screen.getByText("Warning · unknown_bank")).toBeTruthy();
+    expect(
+      [...container.querySelectorAll("table tbody tr")].map((r) => r.querySelector("td")?.textContent),
+    ).toEqual(["1", "2"]);
     expect(container.querySelector("table")?.textContent).not.toMatch(/Ana|Beto/);
     expect(screen.queryByRole("button", { name: "Download CSV" })).toBeNull();
   });
@@ -344,7 +347,7 @@ describe("VerifyView with a v2 receipt (per-payee proofs)", async () => {
         id: "checked_before",
         ok: true,
         detail:
-          "A check report with this hash was anchored at 2026-11-14 11:00:00 UTC, before the receipt (2026-11-14 12:00:00 UTC)",
+          "The issuer anchored check check-20261114-110000 (hash CheckHash1) at 2026-11-14 11:00:00 UTC, before this receipt (anchored 2026-11-14 12:00:00 UTC)",
       },
     ],
   };
@@ -377,7 +380,7 @@ describe("VerifyView with a v2 receipt (per-payee proofs)", async () => {
     paste(text);
     expect(
       await screen.findByText(
-        "✓ Checked before payment: A check report with this hash was anchored at 2026-11-14 11:00:00 UTC, before the receipt (2026-11-14 12:00:00 UTC)",
+        "✓ Checked before payment: The issuer anchored check check-20261114-110000 (hash CheckHash1) at 2026-11-14 11:00:00 UTC, before this receipt (anchored 2026-11-14 12:00:00 UTC)",
       ),
     ).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Delivery report" })).toBeTruthy();
@@ -412,5 +415,37 @@ describe("VerifyView with a v2 receipt (per-payee proofs)", async () => {
     paste(text);
     expect(await screen.findByText(/✗ Checked before payment: The check was anchored at/)).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Delivery report" })).toBeNull();
+  });
+});
+
+describe("DirectReport's check-before sentence", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { DirectReport } = await import("../components/DirectReport.tsx");
+  const v2 = JSON.parse(readFileSync("apps/web/public/receipts/testnet-direct-payroll-v2.json", "utf8"));
+  const linked = { ...v2, check_ref: { report_id: "check-20261114-110000", report_hash: "CheckHash1" } };
+
+  it("says the batch was checked before payment only when that check passed", () => {
+    render(<DirectReport receipt={linked} hash="HV2" checkedBefore print={() => {}} />);
+    expect(
+      screen.getByText(/The batch was checked before payment: check report check-20261114-110000\./),
+    ).toBeTruthy();
+  });
+
+  it("names the linked check in neutral words when that check failed or didn't run", () => {
+    for (const checkedBefore of [false, undefined]) {
+      render(<DirectReport receipt={linked} hash="HV2" checkedBefore={checkedBefore} print={() => {}} />);
+      expect(document.body.textContent).not.toMatch(/checked before payment/i);
+      expect(
+        screen.getByText(
+          /This receipt names check report check-20261114-110000, but it was not shown to be anchored before the receipt\./,
+        ),
+      ).toBeTruthy();
+      cleanup();
+    }
+  });
+
+  it("says no check is linked when there is none", () => {
+    render(<DirectReport receipt={v2} hash="HV2" checkedBefore={false} print={() => {}} />);
+    expect(screen.getByText(/No check made before payment is linked\./)).toBeTruthy();
   });
 });

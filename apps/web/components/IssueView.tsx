@@ -1,7 +1,7 @@
 "use client";
 import { LABEL } from "@elivo/shared/label";
 import { useEffect, useRef, useState } from "react";
-import { lastAnchoredCheck } from "../lib/check.ts";
+import { clearLinkedCheck, lastAnchoredCheck } from "../lib/check.ts";
 import type { WebConfig } from "../lib/config.ts";
 import {
   PENDING_KEY,
@@ -142,6 +142,11 @@ export function IssueView({
       setMine(listIssued(p.receipt.issuer, local()));
       setIssued(rec);
       setPending(null);
+      // The linked check is used up: the next receipt from this browser doesn't name it too.
+      if (p.receipt.check_ref) {
+        clearLinkedCheck(p.receipt.issuer, p.receipt.check_ref, local());
+        setLinked(lastAnchoredCheck(p.receipt.issuer, local()));
+      }
       // Not stored: the pending entry is the only other copy of the salt, so it stays until a save works.
       if (stored)
         try {
@@ -389,7 +394,7 @@ export function IssueView({
               </>
             ) : (
               <p className="muted small">
-                {`No check anchored from this browser for ${account} yet. `}
+                {`No check anchored from this browser for ${account} is waiting to be linked. `}
                 <a href="/check">Check the batch on /check before paying</a>
                 {" and the next receipt will point to that check."}
               </p>
@@ -531,7 +536,11 @@ export function IssueView({
             {copiedLine("links")}
           </Sticker>
 
-          <DirectReport receipt={issued.receipt} hash={issued.hash} />
+          <DirectReport
+            receipt={issued.receipt}
+            hash={issued.hash}
+            checkedBefore={!!outcome?.checks.some((c) => c.id === "checked_before" && c.ok)}
+          />
         </div>
       )}
 

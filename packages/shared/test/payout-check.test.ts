@@ -80,6 +80,13 @@ describe("checkBatch on SPEI", () => {
     expect(same.rows[0]?.findings).toEqual([]);
   });
 
+  it("doesn't read the history's inherited properties as a payee seen before", () => {
+    for (const name of ["constructor", "toString", "hasOwnProperty", "__proto__"]) {
+      const res = checkBatch([row(2, name, GOOD, "100.00")], { rail: "SPEI", history: {} });
+      expect(codes(res.rows[0] as { findings: { code: string }[] }), name).toEqual([]);
+    }
+  });
+
   it("warns when one name has several accounts", () => {
     const res = checkBatch([row(2, "Ana Prueba", GOOD, "10.00"), row(3, "ana  prueba", OTHER, "10.00")], {
       rail: "SPEI",

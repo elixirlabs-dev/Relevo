@@ -373,7 +373,8 @@ async function verifyDirectV2(
 
 /**
  * "Checked before payment": the check named in `check_ref` is anchored by the same issuer, with the
- * hash the receipt names, strictly earlier than the receipt.
+ * hash the receipt names, strictly earlier than the receipt. It does not compare the check's rows with
+ * the receipt's payouts, so the line says only when the issuer anchored which check.
  */
 async function checkedBefore(
   r: DirectReceiptV2,
@@ -413,7 +414,9 @@ async function checkedBefore(
     ? {
         id: "checked_before",
         ok: true,
-        detail: `A check report with this hash was anchored at ${checkAt}, before the receipt (${receiptAt})`,
+        // Only what was read: the anchor's issuer, hash and time. It doesn't say the check's rows match
+        // this receipt's payouts (the check report itself isn't fetched).
+        detail: `The issuer anchored check ${ref.report_id} (hash ${ref.report_hash}) at ${checkAt}, before this receipt (anchored ${receiptAt})`,
       }
     : fail(
         `The check was anchored at ${checkAt}, not before the receipt (${receiptAt}): it was not made before payment`,

@@ -3,6 +3,7 @@ import { verifyDirectSignaturesWeb } from "@elivo/shared/direct-verify-web";
 import { describe, expect, it } from "vitest";
 import {
   acceptHistory,
+  clearLinkedCheck,
   clearPendingHistory,
   commitPendingHistory,
   historyKey,
@@ -85,6 +86,21 @@ describe("runCheck", () => {
       expect(all.has(c), c).toBe(true);
     expect(out.result.ok).toBe(false);
     expect(s.length).toBe(0);
+  });
+
+  it("records a first-time payee named like an Object property, and later flags their changed account", () => {
+    const s = memoryStorage();
+    const csv = "name,account,amount\nconstructor,002010077777777771,100.00\n";
+    const first = runCheck({ csv, rail: "SPEI", account }, s);
+    if (!first.ok) throw new Error(first.errors.join());
+    expect(codes(first.result.rows[0])).toEqual([]);
+    expect(Object.hasOwn(readHistory(account, s), "constructor")).toBe(true);
+    const changed = runCheck(
+      { csv: csv.replace("002010077777777771", "072180009876543213"), rail: "SPEI", account },
+      s,
+    );
+    if (!changed.ok) throw new Error(changed.errors.join());
+    expect(codes(changed.result.rows[0])).toEqual(["account_changed"]);
   });
 
   it("reports a bad header instead of checking", () => {
@@ -171,6 +187,33 @@ describe("anchored checks", () => {
     expect(lastAnchoredCheck("bob.testnet", s)).toBeNull();
     s.setItem("elivo-check-last:alice.testnet", "{broken");
     expect(lastAnchoredCheck(account, s)).toBeNull();
+  });
+
+  it("forgets the last check once a receipt that links it is anchored, and only that check", () => {
+    const s = memoryStorage();
+    const last = { report_id: "check-20261114-150000", hash: "H", checked_at: "T" };
+    recordAnchoredCheck(account, last, s);
+    // A receipt that links no check, or another check, leaves it in place.
+    clearLinkedCheck(account, null, s);
+    clearLinkedCheck(account, { report_id: "check-20261114-140000", report_hash: "H0" }, s);
+    clearLinkedCheck(account, { report_id: last.report_id, report_hash: "other" }, s);
+    expect(lastAnchoredCheck(account, s)).toEqual(last);
+    clearLinkedCheck(account, { report_id: last.report_id, report_hash: last.hash }, s);
+    expect(lastAnchoredCheck(account, s)).toBeNull();
+    expect(s.getItem("elivo-check-last:alice.testnet")).toBeNull();
+    // Storage that throws is ignored.
+    const broken = {
+      ...memoryStorage(),
+      getItem: () => {
+        throw new Error("blocked");
+      },
+      removeItem: () => {
+        throw new Error("blocked");
+      },
+    } as Storage;
+    expect(() =>
+      clearLinkedCheck(account, { report_id: last.report_id, report_hash: last.hash }, broken),
+    ).not.toThrow();
   });
 
   it("keeps a pending report across a wallet redirect, and ignores anything else", () => {
