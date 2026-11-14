@@ -1,0 +1,190 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/elixirlabs-dev/Relevo/blob/main/docs/receipts/elivo-check-report-1.schema.json",
+  "title": "Elivo pre-payout check report, version elivo-check-report-1",
+  "description": "Testnet prototype. Payout firms and SPEI receipts are simulated. Contract unaudited. A signed record of the checks an issuer ran on a planned batch before paying it, and what they found. Its hash is anchored in the receipt registry contract under the issuer's account, with the report id as the receipt id. Payees appear only as a salted hash of the account and its last 4 digits.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "label",
+    "network",
+    "registry",
+    "issuer",
+    "report_id",
+    "checked_at",
+    "rail",
+    "engine",
+    "rows",
+    "summary",
+    "signatures"
+  ],
+  "properties": {
+    "version": {
+      "const": "elivo-check-report-1"
+    },
+    "label": {
+      "type": "string",
+      "minLength": 1
+    },
+    "network": {
+      "enum": [
+        "sandbox",
+        "testnet",
+        "mainnet"
+      ]
+    },
+    "registry": {
+      "$ref": "#/$defs/account"
+    },
+    "issuer": {
+      "$ref": "#/$defs/account"
+    },
+    "report_id": {
+      "type": "string",
+      "pattern": "^check-[0-9]{8}-[0-9]{6}$"
+    },
+    "checked_at": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}(:[0-9]{2}(\\.[0-9]+)?)?Z$"
+    },
+    "rail": {
+      "type": "string",
+      "pattern": "^[A-Z0-9_-]{2,16}$"
+    },
+    "engine": {
+      "const": "elivo-check-1"
+    },
+    "rows": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "payee_ref",
+          "account_last4",
+          "bank",
+          "amount",
+          "findings"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "payee_ref": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "account_last4": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9]{4}$"
+          },
+          "bank": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "amount": {
+            "$ref": "#/$defs/amount"
+          },
+          "findings": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "missing_name",
+                "bad_amount",
+                "clabe_length",
+                "clabe_non_digit",
+                "clabe_check_digit",
+                "bad_account",
+                "unknown_bank",
+                "duplicate_account",
+                "name_multiple_accounts",
+                "amount_outlier",
+                "account_changed"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rows",
+        "blocked",
+        "warned",
+        "clean"
+      ],
+      "properties": {
+        "rows": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "blocked": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "warned": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "clean": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "signatures": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "alg",
+          "public_key",
+          "sig"
+        ],
+        "properties": {
+          "alg": {
+            "enum": [
+              "ed25519",
+              "ml-dsa-65"
+            ]
+          },
+          "public_key": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sig": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "account": {
+      "type": "string",
+      "pattern": "^[a-z0-9._-]{2,64}$"
+    },
+    "amount": {
+      "type": "string",
+      "pattern": "^\\d{1,15}\\.\\d{2}$"
+    }
+  }
+}

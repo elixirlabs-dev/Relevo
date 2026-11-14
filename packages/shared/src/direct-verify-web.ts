@@ -4,11 +4,14 @@
  */
 import canonicalize from "canonicalize";
 import { b58decode, b58encode } from "./base58.ts";
-import type { DirectReceipt } from "./direct-receipt.ts";
+import type { DirectSignature } from "./direct-receipt.ts";
 import { mldsaVerify } from "./pq-keys.ts";
 import type { VerifyResult } from "./receipt.ts";
 
 const canonicalBytes = (v: unknown) => new TextEncoder().encode(canonicalize(v) ?? "");
+
+/** A direct receipt or a check report: any registry-anchored document signed the same way. */
+export type SignedDocument = { signatures: DirectSignature[] };
 
 function fromBase64(s: string): Uint8Array | null {
   try {
@@ -29,7 +32,7 @@ function rawEd25519(pk: string): Uint8Array | null {
 }
 
 /** The bytes every signature covers: canonical JSON of the receipt without `signatures`. */
-export function directSigningBytes(r: DirectReceipt): Uint8Array {
+export function directSigningBytes<T extends SignedDocument>(r: T): Uint8Array {
   const { signatures: _s, ...body } = r;
   return canonicalBytes(body);
 }
@@ -52,7 +55,10 @@ export interface IssuerKeys {
  * the ML-DSA-65 signature is by that key. Both cover the same bytes. A post-quantum signature with no
  * post-quantum key on-chain, or a missing one when there is, is malformed.
  */
-export async function verifyDirectSignaturesWeb(r: DirectReceipt, keys: IssuerKeys): Promise<VerifyResult> {
+export async function verifyDirectSignaturesWeb<T extends SignedDocument>(
+  r: T,
+  keys: IssuerKeys,
+): Promise<VerifyResult> {
   const sigs = Array.isArray(r?.signatures) ? r.signatures : [];
   const ed = sigs.filter((s) => s?.alg === "ed25519");
   const pq = sigs.filter((s) => s?.alg === "ml-dsa-65");
@@ -80,6 +86,6 @@ export async function verifyDirectSignaturesWeb(r: DirectReceipt, keys: IssuerKe
 }
 
 /** base58(sha256(canonical JSON of the whole signed receipt)): the hash the registry anchors. */
-export async function directHashB58Web(r: DirectReceipt): Promise<string> {
+export async function directHashB58Web<T extends SignedDocument>(r: T): Promise<string> {
   return b58encode(new Uint8Array(await crypto.subtle.digest("SHA-256", canonicalBytes(r))));
 }

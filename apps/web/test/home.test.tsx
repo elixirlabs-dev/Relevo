@@ -31,16 +31,20 @@ it("on a read-only site, leads to the reference run and its receipt instead of a
     expect(getByRole("link", { name: "See the reference run →" }).getAttribute("href")).toBe("/chain/5");
     expect(getByRole("link", { name: "Verify its receipt" }).getAttribute("href")).toBe("/verify");
     expect(queryByRole("link", { name: /Start a batch/ })).toBeNull();
-    expect(navLinks(false).map((l) => l.href)).toEqual(["/firms", "/issue", "/verify"]);
-    expect(navLinks(true).map((l) => l.href)).toEqual(["/new", "/firms", "/issue", "/verify"]);
+    expect(navLinks(false).map((l) => l.href)).toEqual(["/firms", "/check", "/issue", "/verify"]);
+    expect(navLinks(true).map((l) => l.href)).toEqual(["/new", "/firms", "/check", "/issue", "/verify"]);
   } finally {
     if (saved !== undefined) process.env.ROUTER_URL = saved;
   }
 });
 
-it("offers three things to try in a minute: issue a receipt, verify one, watch an escrow batch", () => {
+it("offers four things to try in a minute: check a batch, issue a receipt, verify one, watch an escrow batch", () => {
   const { getByRole, container } = render(<Home />);
   expect(container.textContent).toContain("Try it in 60 seconds");
+  const check = getByRole("link", { name: "Check a batch →" });
+  expect(check.getAttribute("href")).toBe("/check");
+  const cards = [...container.querySelectorAll(".steps-band")][0].querySelectorAll("li");
+  expect(cards[0].contains(check)).toBe(true);
   expect(getByRole("link", { name: "Issue a receipt →" }).getAttribute("href")).toBe("/issue");
   expect(getByRole("link", { name: "Verify a receipt →" }).getAttribute("href")).toBe("/verify");
   expect(getByRole("link", { name: "Watch batch 5 →" }).getAttribute("href")).toBe("/chain/5");

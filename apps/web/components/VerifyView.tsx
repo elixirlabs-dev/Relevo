@@ -5,6 +5,7 @@ import { directReceiptToCsv, receiptToCsv } from "@elivo/shared/receipt-csv";
 import { useEffect, useRef, useState } from "react";
 import { decodeShare } from "../lib/share.ts";
 import { type CheckId, type VerifyOutcome, verifyAgainstChain } from "../lib/verify.ts";
+import { CheckReportSheet } from "./CheckReport.tsx";
 import { DeliveryReport } from "./DeliveryReport.tsx";
 import { DirectReport } from "./DirectReport.tsx";
 import { ShareLink } from "./ShareLink.tsx";
@@ -97,6 +98,7 @@ export function VerifyView({ app, verify, save = saveFile, print, fragment, copy
 
   const r = outcome?.receipt;
   const d = outcome?.direct;
+  const c = outcome?.check;
   const status = !outcome ? "idle" : outcome.ok ? "done" : "offline";
   return (
     <div className="stack">
@@ -150,7 +152,9 @@ export function VerifyView({ app, verify, save = saveFile, print, fragment, copy
             {outcome.ok ? (
               <Chip tone="mint">Verified against the chain</Chip>
             ) : (
-              <Chip tone="rose">Not verified: the CSV export needs every check to pass</Chip>
+              <Chip tone="rose">
+                {c ? "Not verified" : "Not verified: the CSV export needs every check to pass"}
+              </Chip>
             )}
           </div>
           <ul className="stack" style={{ listStyle: "none", padding: 0, margin: 0 }}>
@@ -210,6 +214,19 @@ export function VerifyView({ app, verify, save = saveFile, print, fragment, copy
           </div>
           <ShareLink text={text} copy={copy} />
           <DirectReport receipt={d} hash={outcome.hash} print={print} />
+        </div>
+      )}
+
+      {outcome?.ok && c && outcome.hash && (
+        <div className="stack">
+          <div className="tickets">
+            <Ticket label="Rows" value={String(c.summary.rows)} />
+            <Ticket label="Blocked" value={String(c.summary.blocked)} tone="rose" />
+            <Ticket label="Warnings" value={String(c.summary.warned)} tone="peach" />
+            <Ticket label="Clean" value={String(c.summary.clean)} tone="mint" />
+          </div>
+          <ShareLink text={text} copy={copy} />
+          <CheckReportSheet report={c} hash={outcome.hash} print={print} />
         </div>
       )}
     </div>

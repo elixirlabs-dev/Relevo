@@ -18,8 +18,8 @@ import type { RowError } from "./csv.ts";
 import {
   DIRECT_VERSION,
   type DirectPayout,
-  type DirectReceipt,
   type DirectReceiptBody,
+  type DirectSignature,
   type DirectStatus,
   directTotals,
   RECEIPT_ID,
@@ -145,14 +145,17 @@ export function ed25519PublicKeyStr(seed: Uint8Array): string {
   return `ed25519:${b58encode(ed25519.getPublicKey(seed))}`;
 }
 
-/** Signs with the ed25519 seed, and also with ML-DSA-65 when a post-quantum key is given. */
-export function signDirectReceiptWeb(
-  body: DirectReceiptBody,
+/**
+ * Signs with the ed25519 seed, and also with ML-DSA-65 when a post-quantum key is given. Check reports
+ * (check-report.ts) are signed the same way.
+ */
+export function signDirectReceiptWeb<B extends object = DirectReceiptBody>(
+  body: B,
   edSeed: Uint8Array,
   pq?: MlDsaKey,
-): DirectReceipt {
+): B & { signatures: DirectSignature[] } {
   const msg = canonicalBytes(body);
-  const signatures: DirectReceipt["signatures"] = [
+  const signatures: DirectSignature[] = [
     { alg: "ed25519", public_key: ed25519PublicKeyStr(edSeed), sig: toB64(ed25519.sign(msg, edSeed)) },
   ];
   if (pq) signatures.push({ alg: "ml-dsa-65", public_key: pq.publicKeyB64, sig: toB64(mldsaSign(pq, msg)) });
@@ -160,6 +163,6 @@ export function signDirectReceiptWeb(
 }
 
 /** base58(sha256(canonical JSON of the whole signed receipt)), synchronously: the hash the registry anchors. */
-export function directHashB58Sync(r: DirectReceipt): string {
+export function directHashB58Sync<T extends { signatures: DirectSignature[] }>(r: T): string {
   return b58encode(sha256(canonicalBytes(r)));
 }

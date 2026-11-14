@@ -79,16 +79,27 @@ export default function Home() {
 
       <section className="band">
         <Eyebrow>Try it in 60 seconds</Eyebrow>
-        <h2>No sign-up. Only the first one needs a testnet wallet.</h2>
+        <h2>No sign-up. You only need a testnet wallet to anchor something on NEAR.</h2>
         <ol className="steps-band">
+          <Sticker as="li" tone="lavender">
+            <Eyebrow>Before paying · any rail</Eyebrow>
+            <h3>Check a batch</h3>
+            <p className="muted small">
+              Load a sample batch with problems and see each one caught in your browser: a CLABE typo, a
+              duplicate account, an unusual amount, a changed account. Then anchor the check report on NEAR.
+            </p>
+            <Button href="/check">Check a batch →</Button>
+          </Sticker>
           <Sticker as="li" tone="mint">
-            <Eyebrow>Your wallet · any rail</Eyebrow>
+            <Eyebrow>After paying · any rail</Eyebrow>
             <h3>Issue your own receipt</h3>
             <p className="muted small">
               Connect a testnet wallet, sign the sample payouts in your browser (ed25519 plus ML-DSA-65,
               post-quantum) and anchor the receipt on NEAR. Then share it as a link.
             </p>
-            <Button href="/issue">Issue a receipt →</Button>
+            <Button href="/issue" variant="secondary">
+              Issue a receipt →
+            </Button>
           </Sticker>
           <Sticker as="li" tone="peach">
             <Eyebrow>No wallet needed</Eyebrow>
@@ -101,7 +112,7 @@ export default function Home() {
               Verify a receipt →
             </Button>
           </Sticker>
-          <Sticker as="li" tone="lavender">
+          <Sticker as="li" tone="paper">
             <Eyebrow>Escrow · DAO vote</Eyebrow>
             <h3>Watch an escrow batch</h3>
             <p className="muted small">

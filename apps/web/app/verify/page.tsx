@@ -18,9 +18,9 @@ export default function VerifyPage() {
         <p className="lede">
           Your browser checks the signature against the receipt key on-chain, checks the anchored hash, and
           adds up the totals. It accepts batch receipts from the escrow and receipts an issuer made for
-          payouts on any rail, outside the escrow, anchored in the receipt registry. Once every check passes
-          you can export the payouts as CSV for your accounting tools. The format is published in{" "}
-          <code>docs/receipts</code>.
+          payouts on any rail, outside the escrow, anchored in the receipt registry, and the check reports
+          anchored on /check before paying. Once every check passes you can export the payouts as CSV for your
+          accounting tools. The format is published in <code>docs/receipts</code>.
         </p>
       </div>
       {error && <p className="bad">Could not load: {error}</p>}

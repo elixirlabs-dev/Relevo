@@ -109,3 +109,25 @@ pnpm issue-receipt samples/payroll-results.csv --id <receipt-id> --issuer <your-
 ```
 
 Add `--pq` to sign with ML-DSA-65 as well; the command creates the post-quantum key on first use and publishes it with your ed25519 key. The results CSV has the columns `name,account,amount,status,paid_at,reference`. Names and full account numbers never leave your machine. The command publishes your receipt key if needed, signs, anchors, and writes the receipt and its salt to `.data/receipts/`.
+
+# Check report: `elivo-check-report-1`
+
+A signed record of the checks an issuer ran on a planned batch before paying it, and what they found. The `/check` page builds it in the browser and the issuer anchors it in the same receipt registry as direct receipts, so anyone can later see that the batch was checked, and when. It proves what the issuer checked and signed at that moment; it does not prove the payouts were made, and name-to-account matching (which needs a licensed account-validation provider) is not part of it.
+
+| File | What it is |
+|---|---|
+| [`elivo-check-report-1.schema.json`](elivo-check-report-1.schema.json) | JSON Schema (draft 2020-12) |
+
+## Fields
+
+- `report_id`: `check-YYYYMMDD-HHMMSS`, the UTC time of the check (`checked_at`). It is the receipt id the report is anchored under.
+- `registry`, `issuer`, `network`, `rail`, `label`: as in a direct receipt.
+- `engine`: `elivo-check-1`, the set of checks that ran.
+- Each row: `id`, `payee_ref` = `sha256(salt ‖ account)` in hex (the salt stays with the issuer), `account_last4`, `bank` (the SPEI bank for the CLABE's first three digits, or `null`), `amount` (two decimal places) and `findings`, a list of codes. Names never appear.
+- Findings that block a payout: `missing_name`, `bad_amount`, `clabe_length`, `clabe_non_digit`, `clabe_check_digit`, `bad_account`. Warnings: `unknown_bank` (a bank code outside this prototype's partial list), `duplicate_account`, `name_multiple_accounts`, `amount_outlier` (more than three times the batch median) and `account_changed` (the payee's account differs from the one this browser recorded last time). Only a batch with no blocking finding can be anchored.
+- `summary`: `rows`, `blocked`, `warned` and `clean`, recomputable from the rows' findings.
+- `signatures`: as in a direct receipt.
+
+## Signing, anchoring and verifying
+
+Exactly as for a direct receipt: the signatures cover the RFC 8785 canonical JSON without `signatures` (ML-DSA-65 with the same context string, `elivo-direct-receipt-1`; the `version` field is inside the signed bytes, so a report can't pass as a receipt), and the registry anchors `base58(sha256(canonical JSON of the whole report))` with `anchor(receipt_id = report_id, receipt_hash)`. To verify, call `get_receipt({"issuer": <issuer>, "receipt_id": <report_id>})` on a registry you chose, check the signatures against the returned keys and the hash against `receipt_hash`, and recompute the summary. `/verify` in the web app runs all four.

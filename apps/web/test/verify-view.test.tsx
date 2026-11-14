@@ -267,3 +267,48 @@ describe("VerifyView share links", async () => {
     expect(await decodeShare(copied[0].slice(copied[0].indexOf("#")))).toBe(files["valid.json"]);
   });
 });
+
+describe("VerifyView with a check report", async () => {
+  const { buildCheckReport, signCheckReport } = await import("@elivo/shared/check-report");
+  const { checkBatch, parsePlannedCsv } = await import("@elivo/shared/payout-check");
+  const { rows } = parsePlannedCsv(
+    "name,account,amount\nAna Secreta,002010077777777771,100\nBeto Secreto,990180002222333347,50\n",
+  );
+  const report = signCheckReport(
+    buildCheckReport(checkBatch(rows, { rail: "SPEI" }), rows, {
+      network: "testnet",
+      registry: "registry.example.testnet",
+      issuer: "payroll.example.testnet",
+      report_id: "check-20261114-120000",
+      salt: new Uint8Array(16),
+    }),
+    new Uint8Array(32).fill(3),
+  );
+  const ok: VerifyOutcome = {
+    receipt: null,
+    direct: null,
+    check: report,
+    hash: "HC",
+    ok: true,
+    checks: [
+      { id: "registry", ok: true, detail: "For registry.example.testnet on testnet" },
+      { id: "signature", ok: true, detail: "Signed" },
+      { id: "anchor", ok: true, detail: "Hash HC matches" },
+      { id: "totals", ok: true, detail: "The summary adds up from the 2 rows' findings" },
+    ],
+  };
+
+  it("shows a check report with findings codes and no names", async () => {
+    const { container } = render(
+      <VerifyView app={{ ...app, registry: "registry.example.testnet" }} verify={async () => ok} />,
+    );
+    paste(JSON.stringify(report));
+    expect(await screen.findByRole("heading", { name: "Check report" })).toBeTruthy();
+    expect(
+      screen.getByText(/check-20261114-120000 · checked by payroll.example.testnet · SPEI/),
+    ).toBeTruthy();
+    expect(screen.getByText("Warning · unknown_bank")).toBeTruthy();
+    expect(container.querySelector("table")?.textContent).not.toMatch(/Ana|Beto/);
+    expect(screen.queryByRole("button", { name: "Download CSV" })).toBeNull();
+  });
+});

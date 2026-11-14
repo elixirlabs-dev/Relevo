@@ -19,11 +19,12 @@ export function routerAvailable(): boolean {
   return !!process.env.ROUTER_URL;
 }
 
-/** Nav links: "New batch" needs the router, so a read-only site leaves it out; issuing needs only a wallet. */
+/** Nav links: "New batch" needs the router, so a read-only site leaves it out; checking and issuing need only a wallet. */
 export function navLinks(withRouter: boolean): Array<{ href: string; label: string }> {
   return [
     ...(withRouter ? [{ href: "/new", label: "New batch" }] : []),
     { href: "/firms", label: "Firms" },
+    { href: "/check", label: "Check" },
     { href: "/issue", label: "Issue" },
     { href: "/verify", label: "Verify" },
   ];

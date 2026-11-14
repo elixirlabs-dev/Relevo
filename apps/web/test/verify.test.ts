@@ -269,3 +269,96 @@ describe("verifyAgainstChain with a post-quantum direct receipt", async () => {
     expect(byId(out).signature.detail).toContain("ML-DSA-65 (FIPS 204, post-quantum)");
   });
 });
+
+describe("verifyAgainstChain with a check report (made before paying)", async () => {
+  const { buildCheckReport, signCheckReport, checkReportHashB58 } = await import(
+    "@elivo/shared/check-report"
+  );
+  const { checkBatch, parsePlannedCsv } = await import("@elivo/shared/payout-check");
+  const { ed25519PublicKeyStr } = await import("@elivo/shared/direct-build");
+  const seed = new Uint8Array(32).fill(11);
+  const registry = "registry.example.testnet";
+  const { rows } = parsePlannedCsv(
+    "name,account,amount\nA,002010077777777771,100\nB,012180001234567899,50\nB,032180000118359719,50\n",
+  );
+  const report = signCheckReport(
+    buildCheckReport(checkBatch(rows, { rail: "SPEI" }), rows, {
+      network: "testnet",
+      registry,
+      issuer: "payroll.example.testnet",
+      report_id: "check-20261114-120000",
+      salt: new Uint8Array(16),
+      checked_at: "2026-11-14T12:00:00.000Z",
+    }),
+    seed,
+  );
+  const HASH_C = checkReportHashB58(report);
+  const capp = { ...app, registry };
+  const regChain = (
+    anchor: object | null = {
+      receipt_hash: HASH_C,
+      receipt_pk: ed25519PublicKeyStr(seed),
+      mldsa65_pk: null,
+      key_version: 1,
+    },
+  ) => {
+    const calls: Array<{ contract: string; method: string; args?: object }> = [];
+    const view = async <T>(contract: string, method: string, args?: object): Promise<T> => {
+      calls.push({ contract, method, args });
+      if (method === "get_receipt") return anchor as T;
+      throw new Error(method);
+    };
+    return { view, calls };
+  };
+
+  it("passes the registry, signature, anchor and totals checks, keyed by the report id", async () => {
+    const c = regChain();
+    const r = await verifyAgainstChain(JSON.stringify(report), capp, c.view);
+    expect(r.checks.map((x) => [x.id, x.ok])).toEqual([
+      ["registry", true],
+      ["signature", true],
+      ["anchor", true],
+      ["totals", true],
+    ]);
+    expect(r.ok).toBe(true);
+    expect(r.check?.report_id).toBe("check-20261114-120000");
+    expect(r.direct).toBeNull();
+    expect(r.receipt).toBeNull();
+    expect(r.hash).toBe(HASH_C);
+    expect(byId(r).totals.detail).toBe("The summary adds up from the 3 rows' findings");
+    expect(c.calls).toEqual([
+      {
+        contract: registry,
+        method: "get_receipt",
+        args: { issuer: "payroll.example.testnet", receipt_id: "check-20261114-120000" },
+      },
+    ]);
+  });
+
+  it("fails the signature when a finding is removed", async () => {
+    const edited = structuredClone(report);
+    edited.rows[1].findings = [];
+    const r = await verifyAgainstChain(JSON.stringify(edited), capp, regChain().view);
+    expect(byId(r).signature.ok).toBe(false);
+    expect(byId(r).totals.ok).toBe(false);
+    expect(r.ok).toBe(false);
+  });
+
+  it("never reads the registry named in the file", async () => {
+    const c = regChain();
+    const r = await verifyAgainstChain(JSON.stringify({ ...report, registry: "evil.testnet" }), capp, c.view);
+    expect(byId(r).registry).toMatchObject({
+      ok: false,
+      detail: `This check report is for evil.testnet on testnet; this app checks ${registry} on testnet`,
+    });
+    expect(c.calls).toEqual([]);
+  });
+
+  it("fails when the issuer anchored nothing under that id", async () => {
+    const r = await verifyAgainstChain(JSON.stringify(report), capp, regChain(null).view);
+    expect(byId(r).anchor).toMatchObject({
+      ok: false,
+      detail: `payroll.example.testnet has anchored no check report "check-20261114-120000" on ${registry}`,
+    });
+  });
+});
