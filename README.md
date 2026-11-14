@@ -310,6 +310,5 @@ Further out:
 - Testnet prototype. Payout firms and SPEI receipts are simulated. Contract unaudited.
 - Not a money transmitter and not a live service. No real money, payees, bank details or firm names: all sample data is invented, and the firms are "MX-1", "MX-2" and "MX-3".
 - "Guaranteed" and "bonded" here describe testnet mechanics only.
-- **TODO (founder): disclosure line about the founder's freelance Aurora role.**
 
 Licensed under [Apache-2.0](LICENSE).

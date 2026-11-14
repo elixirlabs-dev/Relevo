@@ -222,3 +222,48 @@ B,012180001234567899,50,returned,,ACCOUNT_CLOSED
     ).toBeTruthy();
   });
 });
+
+describe("VerifyView share links", async () => {
+  const { encodeShare, decodeShare } = await import("../lib/share.ts");
+
+  it("checks the receipt carried by a share link as soon as the page opens", async () => {
+    const seen: string[] = [];
+    const fragment = `#r=${await encodeShare(files["valid.json"])}`;
+    render(
+      <VerifyView
+        app={app}
+        fragment={fragment}
+        verify={async (input) => {
+          seen.push(input);
+          return passing;
+        }}
+      />,
+    );
+    expect(await screen.findByText("Verified against the chain")).toBeTruthy();
+    expect(seen).toEqual([files["valid.json"]]);
+  });
+
+  it("says so when a share link is broken", async () => {
+    render(<VerifyView app={app} fragment="#r=AAAA" verify={async () => passing} />);
+    expect(await screen.findByText(/This share link is broken/)).toBeTruthy();
+  });
+
+  it("copies a link that carries exactly the receipt that was verified", async () => {
+    const copied: string[] = [];
+    render(
+      <VerifyView
+        app={app}
+        fragment=""
+        verify={async () => passing}
+        copy={async (s) => {
+          copied.push(s);
+        }}
+      />,
+    );
+    paste(files["valid.json"]);
+    fireEvent.click(await screen.findByRole("button", { name: "Copy share link" }));
+    expect(await screen.findByText("Link copied.")).toBeTruthy();
+    expect(copied[0]).toMatch(/\/verify#r=[\w-]+$/);
+    expect(await decodeShare(copied[0].slice(copied[0].indexOf("#")))).toBe(files["valid.json"]);
+  });
+});

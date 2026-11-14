@@ -2,10 +2,12 @@
 import { LABEL } from "@elivo/shared/label";
 import { formatUsdc } from "@elivo/shared/money";
 import { directReceiptToCsv, receiptToCsv } from "@elivo/shared/receipt-csv";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { decodeShare } from "../lib/share.ts";
 import { type CheckId, type VerifyOutcome, verifyAgainstChain } from "../lib/verify.ts";
 import { DeliveryReport } from "./DeliveryReport.tsx";
 import { DirectReport } from "./DirectReport.tsx";
+import { ShareLink } from "./ShareLink.tsx";
 import { Button, Chip, Eyebrow, Sticker, Ticket, Window } from "./ui.tsx";
 
 const CHECK_NAME: Record<CheckId, string> = {
@@ -34,9 +36,12 @@ export interface VerifyViewProps {
   verify?: (input: string) => Promise<VerifyOutcome>;
   save?: (name: string, text: string) => void;
   print?: () => void;
+  /** A `#r=` share fragment to check on load (default: this page's own URL fragment). */
+  fragment?: string;
+  copy?: (s: string) => Promise<void>;
 }
 
-export function VerifyView({ app, verify, save = saveFile, print }: VerifyViewProps) {
+export function VerifyView({ app, verify, save = saveFile, print, fragment, copy }: VerifyViewProps) {
   const [text, setText] = useState("");
   const [outcome, setOutcome] = useState<VerifyOutcome | null>(null);
   const [busy, setBusy] = useState(false);
@@ -77,6 +82,18 @@ export function VerifyView({ app, verify, save = saveFile, print }: VerifyViewPr
       setError(`Could not load the sample receipt: ${(e as Error).message}`);
     }
   };
+
+  // Opened from a share link: check the receipt it carries straight away.
+  const shared = useRef(false);
+  useEffect(() => {
+    if (shared.current) return;
+    shared.current = true;
+    const f = fragment ?? window.location.hash;
+    if (!f.startsWith("#r=")) return;
+    decodeShare(f).then((t) =>
+      t ? run(t) : setError("This share link is broken or incomplete: ask for the link again."),
+    );
+  }, []);
 
   const r = outcome?.receipt;
   const d = outcome?.direct;
@@ -170,6 +187,7 @@ export function VerifyView({ app, verify, save = saveFile, print }: VerifyViewPr
               Download CSV
             </Button>
           </div>
+          <ShareLink text={text} copy={copy} />
           <DeliveryReport receipt={r} hash={outcome.hash} print={print} />
         </div>
       )}
@@ -190,6 +208,7 @@ export function VerifyView({ app, verify, save = saveFile, print }: VerifyViewPr
               Download CSV
             </Button>
           </div>
+          <ShareLink text={text} copy={copy} />
           <DirectReport receipt={d} hash={outcome.hash} print={print} />
         </div>
       )}

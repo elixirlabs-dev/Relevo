@@ -8,6 +8,7 @@ import { viewCall } from "../lib/rpc.ts";
 import type { WalletPort } from "../lib/signer.ts";
 import { type CheckId, type VerifyOutcome, verifyAgainstChain } from "../lib/verify.ts";
 import { DirectReport } from "./DirectReport.tsx";
+import { ShareLink } from "./ShareLink.tsx";
 import { Button, Chip, Eyebrow, Sticker, Window } from "./ui.tsx";
 
 const RAILS = [
@@ -307,6 +308,7 @@ export function IssueView({
               Verify it again on /verify
             </Button>
           </div>
+          <ShareLink text={JSON.stringify(d, null, 2)} />
           <DirectReport receipt={d} hash={outcome.hash} />
         </div>
       )}
