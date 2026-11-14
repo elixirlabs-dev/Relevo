@@ -1,0 +1,78 @@
+{
+  "version": "elivo-direct-receipt-2",
+  "label": "Testnet prototype. Payout firms and SPEI receipts are simulated. Contract unaudited.",
+  "network": "testnet",
+  "registry": "registry.pg-1794403941.testnet",
+  "issuer": "payroll.pg-1794403941.testnet",
+  "receipt_id": "payroll-2026-11-v2",
+  "generated_at": "2026-11-14T19:39:21.846Z",
+  "rail": "SPEI",
+  "currency": "MXN",
+  "totals": {
+    "count": 5,
+    "paid": "138750.00",
+    "not_paid": "27750.00"
+  },
+  "payouts_root": "6e102ecb23eab8e208968180a2753424a13b21e0f6c6bf0299b44bd0eeb963c5",
+  "payout_count": 5,
+  "check_ref": null,
+  "signatures": [
+    {
+      "alg": "ed25519",
+      "public_key": "ed25519:BwdrFWX81PA4dG4KjXhf9mv1ZPm8PWS6hWFAaKC5GvvP",
+      "sig": "aPAGSVQDIs3SQ6n10wtwFWU20beh/s8g0UQdYz/lhYhEyO/KOyKw6XcqSLfaxzqlWU05iUkPca3M7iWqTvGECw=="
+    },
+    {
+      "alg": "ml-dsa-65",
+      "public_key": "RDZXBGdWfI4LY9KxqdN3RI8HDtUrbTY4SldF8lMXGocxmRexWw23nzXpbxl9BudmZJed182dxJ8kuiNqtsZL7RBfQbH0vGmWWV1jrpOjirgbmVg0sdH2AlNzKeVwA/shsSqlJDpiGosKNP1QlYdqicZYW/Rd6gla/0SZjqYJbropGf8pTCVNnCRhZ8LCATCRdWs36R6AC9KK0OAAtqSIE3EEq7g/V2XaWTB/Ygze0jo6EANaLGhp40Hh9nWmnd3z6sd2GCFbMXyp8YXwqEjnjermoBdy8eRlS/7EdclRVkNgmnjquarx/lWjxRmhplNoTGxIOvAsHFVONguhSGNXBwE1cnXWiiWTGRP1yaWUZb6DSPwp9LBxLwdPJ9iAtaq0fCCUoM0QAylmB0M0Ub/7/WQnUOkiHVyZGFf3xNYJr4iX3NVFFohmb5NsnrU/KuBG4XXyJ2khyrdLyNxbojhbhqM3K+Z4sLxiq7kdbd7wBz5+oNlZBdCF6x4Yt0hfJcWzkJ51qvu55RpixPog2SQe491A7atXRrQ0eL4+Vui+ULLdc+WbCl70l3/nfnZAOpKB3BEWsqhMBfhufxBzKaEvkbQmc/0CFb4CXdeEdSZkZ/kuxGl8vmFRrFGB6hPA55BNoBiJPrw7W+gofYtD536evN5tyv2Ww/YaKGzmX87Fb2MPeZmP0T8gV2DQJ6307W1rrZWiBonzSNr4fo+qxwupDgPVVmEzS8SUdR2a5XDtGyFCfhyMXv5DL3MafkrcZ0laFibMPrCRv+V5fm1c7/Pq0MEYf0olfcr7y3nDrxqQYYO2p9YyvIbHZtLRXg3QMlocf2PrJ8MVjUOIhn3z6GFakeg811usEcNZtKeMlnevUo20jdSaOCq8QcR2N81KrM/RDzQHr1b8CfWp2jFBn4dVpib4HnWm8y20tZN5W5Jr5dk7yMqPMVhMn5RtdNMqF82bwFi+WjWgRjQCui/c0tknX6AGM6MRFdWCYtZdPI1jhmMgWMJYw852fIVljo24KUp7Q6aGIMVyVuG9zDsEDQWTvM9MNoau3t3ik5LfXLMfkHt8rVRRqA592Qn+qcvhi9XEoIuQQ6LP5sWM3Y+yIob+wc4GOjkBJwGbdv1PKFHic0RmeBKJpVwkGmWEhLXG9l9zR97quHFrr1zqHSlWYxJHjABkiy5oWTSbb/Ml5CgRy9l614yAFBXTY0IleNVEArgjbkYjhZOK+aGtXt1B7ySZoAbb8yCNMqaFlVQX3S1biDSfs3sJC4kChhvKLe4K8HoaOzUKuZS3+2akywuuHoprjFklymppg1dmOpkkqkLbNKQq38WImytTbSseHx6xkXdAojvOB/R0V9p9yGSRXDpg+pD5vMREMHs9F3MeF4GC+48mRfPIjg94wyuFEWDfs1v0f4IKIIlkmjjKAM5+3Tl00zUsKs0hMp4EuU5FKaIQYIEo78PCFtjN241/ambB0knORR6uFkwbU1CgXJPXmZP1A1kRoLg1Fm7tqIZzF4uqmnzGmj2Ew/Z467jDTJpKh2l9CjYKfhWOgu/JWviZWgzrWozbxakvQZoR5LvoXE4tDoTeOZa9QPuJ03U3UaBMB9xpm9U+KBGNMHD8neOn0kFCGFhhE4VK+BHiMLzMRrQA74sBATN7tj0PFRqfB9D0lwpZ3qawE/Zs7cdnd5HBqXFyzu4uAGItR1uRxlvlOUs1z/aOzcuAENUB/wkIUmsWALFR4vjN1A+0h7LzSwFGrzkApf9yOXGJzOCibUo+1HPvBe50s08ISydTS4CV9Hjaa/xqknVpEq3E4k5AjQz4qTTYSadh8+T5+ty8lo/MLgZStDoTmkb7QxehP58OTkpnHWzwFqzKH2izdzPUfoeGgoLaeMktNcRysUb5jJpW9g5/9z7yyX8fAuJtpSYgTLX4P6QkEGhrqlwM5aC/0be8rIv1k5gDYsKMLt4mTSm91bUGezjqQ4Akcv5uj6RRpavf09W81JovpcC4BOVzaznyrD/gX5eHIo1Euz4sdDDQoloawWXOL8webYfIBVbEc/olHkS4tsISHencBHCwivAZsw9GHB6hewrzVQt43mdzWTPxZAKLG5p0V9b+eIySZ1iWlhG2RQAo5PxggSHmuI0Zqhxnks9TYPvjuQ9sIw+x2yfd3pepEP5wUPy6Bf0JE2o9/eWt6SzHqNuD5hQaatb30qcIkdcA+6HEYhtGfIMa2/x3ZNkxU2OdGN56yGGcScB3ymUC+iRRxiitYDDuDQqLsARoCXmdMoRhzeq3/BPSNXJZkYFNWwtuiCYLW6wIkqQceanDSsdfW5sGynfUmqElGoTWIdPjc1p/4NHlP4a1neLzvXT4RceoYT0l0b5DloJS7ZQYchUoFDAnGCsS5Fui27ACSL4KHvQT0gsdW1RnX2D8qb66fPxXEvhQN5MNXWXZoSfza3TWV+vKVPp6tYUsoV2mdTM/P1cljS2+jKPaNu+E0lDvLl+K6WDhB7JIn8h/gG/JOqn9ujv6frAAFegl+GUBQKHvfD6yoqHlVeKpQmDBEfrzUmu5nXFqwg+GBrfYeLAWgipm4CPeMcKNbDlgzadY0WCJyfHiOmfpwnllgGImReU=",
+      "sig": "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"
+    }
+  ],
+  "payouts": [
+    {
+      "id": 0,
+      "payee_ref": "7e5ce693d2217ccfab4c7c0ed992da00f55eb8918bf75d043daded9665b40ad9",
+      "account_last4": "7771",
+      "amount": "37000.00",
+      "status": "Paid",
+      "paid_at": "2026-11-14T15:02:11Z",
+      "reference": "SIM-SPEI-20261114-0001"
+    },
+    {
+      "id": 1,
+      "payee_ref": "21ff791c76aa7e2a0e30b530fd0ba4b9fda791d4a6305955af08daac89e16b4c",
+      "account_last4": "9719",
+      "amount": "37000.00",
+      "status": "Paid",
+      "paid_at": "2026-11-14T15:02:40Z",
+      "reference": "SIM-SPEI-20261114-0002"
+    },
+    {
+      "id": 2,
+      "payee_ref": "ec67bfdcd5607f329ef1f1ef4562a6d8ad3121440fbf79269815820c8c0a1d7a",
+      "account_last4": "7899",
+      "amount": "27750.00",
+      "status": "Returned",
+      "paid_at": null,
+      "reference": "ACCOUNT_CLOSED"
+    },
+    {
+      "id": 3,
+      "payee_ref": "aedce611bd07651e2e663d6121387875417a17e2db0c39d4038c85297511b051",
+      "account_last4": "3213",
+      "amount": "46250.00",
+      "status": "Paid",
+      "paid_at": "2026-11-14T15:03:05Z",
+      "reference": "SIM-SPEI-20261114-0004"
+    },
+    {
+      "id": 4,
+      "payee_ref": "5d3638acc348c1bc87fb7db930bee5c4c9e4848a2c856676480d2092ba548aed",
+      "account_last4": "5554",
+      "amount": "18500.00",
+      "status": "Paid",
+      "paid_at": "2026-11-14T15:03:31Z",
+      "reference": "SIM-SPEI-20261114-0005"
+    }
+  ]
+}
