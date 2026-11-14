@@ -10,7 +10,7 @@ import {
   readPending,
   SAMPLE_RESULTS_CSV,
 } from "../lib/issue.ts";
-import { payeeLink } from "../lib/payee-link.ts";
+import { payeeLink } from "../lib/payee.ts";
 import {
   findPayout,
   type IssuedReceipt,

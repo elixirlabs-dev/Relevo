@@ -189,7 +189,7 @@ export async function verifyAgainstChain(
   return done(hash);
 }
 
-interface RegistryAnchor {
+export interface RegistryAnchor {
   issuer?: string;
   receipt_hash: string;
   receipt_pk: string;
@@ -199,8 +199,8 @@ interface RegistryAnchor {
   anchored_at_ns?: string;
 }
 
-/** A document anchored in the receipt registry: a direct receipt or a check report. */
-interface RegistryDocument {
+/** A document anchored in the receipt registry: a direct receipt, a check report, a payee proof's header. */
+export interface RegistryDocument {
   network: string;
   registry: string;
   issuer: string;
@@ -211,8 +211,10 @@ interface RegistryDocument {
  * The registry, signature and anchor checks shared by direct receipts and check reports: the registry
  * and network from this app's config, the issuer's keys and the anchored hash from the registry's
  * get_receipt (keyed by the issuer account and the document's id). Then `totals` adds the last check.
+ * A document whose signed bytes or anchored hash differ from v1's brings its own `hash` and
+ * `signatures` (both default to the v1 ones). `anchor` is what the registry returned, if anything.
  */
-async function verifyRegistryDocument<T extends RegistryDocument>(
+export async function verifyRegistryDocument<T extends RegistryDocument>(
   r: T,
   doc: {
     id: string;
@@ -230,8 +232,8 @@ async function verifyRegistryDocument<T extends RegistryDocument>(
   const done = (hash: string | null) => ({
     checks,
     hash,
-    anchor,
     ok: checks.length === 4 && checks.every((c) => c.ok),
+    anchor,
   });
   const registry = app.registry ?? null;
   const same = !!registry && r.registry === registry && r.network === app.network;
@@ -300,7 +302,7 @@ async function verifyDirect(
   app: { network: string; registry?: string | null },
   view: View,
 ): Promise<VerifyOutcome> {
-  const out = await verifyRegistryDocument(
+  const { anchor: _anchor, ...out } = await verifyRegistryDocument(
     r,
     {
       id: r.receipt_id,
@@ -320,8 +322,7 @@ async function verifyDirect(
     app,
     view,
   );
-  const { anchor: _a, ...rest } = out;
-  return { receipt: null, direct: r, check: null, ...rest };
+  return { receipt: null, direct: r, check: null, ...out };
 }
 
 const STRUCTURE_WORDS: Record<string, string> = {
@@ -425,7 +426,7 @@ async function verifyCheckReport(
   app: { network: string; registry?: string | null },
   view: View,
 ): Promise<VerifyOutcome> {
-  const out = await verifyRegistryDocument(
+  const { anchor: _anchor, ...out } = await verifyRegistryDocument(
     r,
     {
       id: r.report_id,
@@ -445,6 +446,5 @@ async function verifyCheckReport(
     app,
     view,
   );
-  const { anchor: _a, ...rest } = out;
-  return { receipt: null, direct: null, check: r, ...rest };
+  return { receipt: null, direct: null, check: r, ...out };
 }

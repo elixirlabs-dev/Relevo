@@ -47,7 +47,7 @@ async function readAll(stream: ReadableStream<Uint8Array>, limit: number): Promi
   return out;
 }
 
-/** The fragment payload (without "#r=") for a receipt's JSON text. */
+/** The fragment payload (without "#r=" or "#p=") for a JSON text: base64url(deflate-raw(text)). */
 export async function encodeShare(text: string): Promise<string> {
   const stream = new Blob([new TextEncoder().encode(text)])
     .stream()
@@ -57,10 +57,13 @@ export async function encodeShare(text: string): Promise<string> {
   );
 }
 
-/** The receipt JSON text carried by a `#r=` fragment (or a bare payload), or null. */
-export async function decodeShare(fragment: string): Promise<string | null> {
-  const payload = fragment.startsWith(PREFIX)
-    ? fragment.slice(PREFIX.length)
+/**
+ * The text carried by a fragment with this prefix (e.g. "#r=" or "#p="), or by a bare payload, or null.
+ * Shared by receipt links (`#r=`) and payee links (`#p=`, lib/payee.ts).
+ */
+export async function decodeFragment(fragment: string, prefix: string): Promise<string | null> {
+  const payload = fragment.startsWith(prefix)
+    ? fragment.slice(prefix.length)
     : fragment.startsWith("#")
       ? ""
       : fragment;
@@ -76,6 +79,11 @@ export async function decodeShare(fragment: string): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+/** The receipt JSON text carried by a `#r=` fragment (or a bare payload), or null. */
+export function decodeShare(fragment: string): Promise<string | null> {
+  return decodeFragment(fragment, PREFIX);
 }
 
 export function shareUrl(origin: string, payload: string): string {
