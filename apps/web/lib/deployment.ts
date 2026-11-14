@@ -27,5 +27,6 @@ export function navLinks(withRouter: boolean): Array<{ href: string; label: stri
     { href: "/check", label: "Check" },
     { href: "/issue", label: "Issue" },
     { href: "/verify", label: "Verify" },
+    { href: "/fund", label: "Fund" },
   ];
 }

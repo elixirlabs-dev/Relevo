@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 /**
- * The browser only talks to this server. /rpc is a route handler (view calls only). The router is
+ * The browser only talks to this server, except /fund, which calls the NEAR Intents 1Click API (mainnet)
+ * directly; it holds no keys and moves no funds. /rpc is a route handler (view calls only). The router is
  * proxied only for the paths the UI uses (not /sim, /proofs, /exclusions or /orders), and the
  * sandbox demo signer when it is running. The dev server binds to 127.0.0.1 (scripts/lib/web-args.ts).
  */

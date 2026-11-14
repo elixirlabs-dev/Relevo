@@ -1,0 +1,66 @@
+{
+  "correlationId": "5b0f2c3e-8a41-4d67-9e12-7c3a5b9d1f04",
+  "quoteResponse": {
+    "quote": {
+      "amountIn": "1500000",
+      "amountInFormatted": "1.5",
+      "amountInUsd": "1.499470500000",
+      "minAmountIn": "1500000",
+      "amountOut": "1496060",
+      "amountOutFormatted": "1.49606",
+      "amountOutUsd": "1.495531890820",
+      "minAmountOut": "1481099",
+      "timeEstimate": 35,
+      "refundFee": "2400",
+      "withdrawFee": "3789",
+      "depositAddress": "0x5c1e3a7f9b2d4e6081a3c5e7f9b1d3a5c7e9f1b3",
+      "deadline": "2026-11-14T21:22:10.507Z",
+      "timeWhenInactive": "2026-11-14T21:22:10.507Z"
+    },
+    "quoteRequest": {
+      "dry": false,
+      "depositMode": "SIMPLE",
+      "swapType": "EXACT_INPUT",
+      "slippageTolerance": 100,
+      "originAsset": "nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near",
+      "depositType": "ORIGIN_CHAIN",
+      "destinationAsset": "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+      "amount": "1500000",
+      "refundTo": "0x0000000000000000000000000000000000000001",
+      "refundType": "ORIGIN_CHAIN",
+      "recipient": "example.near",
+      "recipientType": "DESTINATION_CHAIN",
+      "deadline": "2026-11-14T21:22:10.507Z",
+      "confidentiality": "public",
+      "quoteWaitingTimeMs": 0,
+      "insured": false,
+      "appFees": [
+        {
+          "recipient": "5880ad2b362620fadf759cbceb1cd5737ce8c6ed7fb8e9942881e6731f9247dd",
+          "fee": 1
+        }
+      ]
+    },
+    "signature": "ed25519:4WkqZ8rN7yV2cT6bLmP3sH9dF1gJ5xE8aU2oR7iK4nQ6wY3zB9vC1tM5pS8hL2fD7jG4kX6eA9uN3rT1yW5qZ8b",
+    "timestamp": "2026-11-14T20:22:10.679Z",
+    "correlationId": "5b0f2c3e-8a41-4d67-9e12-7c3a5b9d1f04"
+  },
+  "status": "PENDING_DEPOSIT",
+  "updatedAt": "2026-11-14T20:22:11.000Z",
+  "swapDetails": {
+    "intentHashes": [],
+    "nearTxHashes": [],
+    "amountIn": null,
+    "amountInFormatted": null,
+    "amountInUsd": null,
+    "amountOut": null,
+    "amountOutFormatted": null,
+    "amountOutUsd": null,
+    "slippage": null,
+    "originChainTxHashes": [],
+    "destinationChainTxHashes": [],
+    "refundedAmount": "0",
+    "refundedAmountFormatted": "0",
+    "refundedAmountUsd": "0"
+  }
+}

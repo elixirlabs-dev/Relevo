@@ -31,8 +31,15 @@ it("on a read-only site, leads to the reference run and its receipt instead of a
     expect(getByRole("link", { name: "See the reference run →" }).getAttribute("href")).toBe("/chain/5");
     expect(getByRole("link", { name: "Verify its receipt" }).getAttribute("href")).toBe("/verify");
     expect(queryByRole("link", { name: /Start a batch/ })).toBeNull();
-    expect(navLinks(false).map((l) => l.href)).toEqual(["/firms", "/check", "/issue", "/verify"]);
-    expect(navLinks(true).map((l) => l.href)).toEqual(["/new", "/firms", "/check", "/issue", "/verify"]);
+    expect(navLinks(false).map((l) => l.href)).toEqual(["/firms", "/check", "/issue", "/verify", "/fund"]);
+    expect(navLinks(true).map((l) => l.href)).toEqual([
+      "/new",
+      "/firms",
+      "/check",
+      "/issue",
+      "/verify",
+      "/fund",
+    ]);
   } finally {
     if (saved !== undefined) process.env.ROUTER_URL = saved;
   }
@@ -49,4 +56,12 @@ it("offers four things to try in a minute: check a batch, issue a receipt, verif
   expect(getByRole("link", { name: "Verify a receipt →" }).getAttribute("href")).toBe("/verify");
   expect(getByRole("link", { name: "Watch batch 5 →" }).getAttribute("href")).toBe("/chain/5");
   expect(container.textContent).toMatch(/post-quantum/i);
+});
+
+it("points to the mainnet deposit page in one line, marked as real money", () => {
+  const { getByRole, container } = render(<Home />);
+  expect(getByRole("link", { name: "fund a NEAR account from Base or Arbitrum" }).getAttribute("href")).toBe(
+    "/fund",
+  );
+  expect(container.textContent).toContain("That one uses real money.");
 });
