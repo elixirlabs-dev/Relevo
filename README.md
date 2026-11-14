@@ -36,6 +36,8 @@ No keys, accounts or funds are needed.
 3. **Tamper with it.** Download the [reference receipt](apps/web/public/receipts/testnet-batch-5.json), change any amount, and upload it on the same page. The signature check fails.
 4. **Check a post-quantum receipt for payouts made outside the escrow.** On the same page, choose "Use a payroll receipt made outside the escrow (post-quantum signed)". A sample payroll issuer paid five contractors on its own, then signed the receipt twice, with ed25519 and with ML-DSA-65 (FIPS 204, post-quantum), and anchored it in the receipt registry. The same four checks run against the registry, and both signatures must match the keys the issuer published on-chain.
 
+5. **Issue your own receipt, with your own wallet.** Open https://relevo-amber.vercel.app/issue, connect a NEAR testnet wallet (MyNearWallet, Intear or Sender), and sign the sample payouts or your own. Your browser signs the receipt (ed25519 plus an optional ML-DSA-65 post-quantum signature); names and account numbers never leave it. One wallet transaction publishes your receipt keys and anchors the receipt in the registry, then the page verifies it against the chain. It costs about 0.025 testnet NEAR of storage.
+
 Each firm's bond and on-chain record is at https://relevo-amber.vercel.app/firms.
 
 ## What is real and what is simulated
@@ -46,7 +48,7 @@ Each firm's bond and on-chain record is at https://relevo-amber.vercel.app/firms
 | Sputnik DAO v2 vote that funds the batch | Real DAO from the official testnet factory (`sputnikv2.testnet`) |
 | Router: quotes, assignment, reroute, settle, refund, receipt anchoring (`apps/router`) | Real service. It signs only with a function-call key limited to six escrow methods. |
 | Signed receipts and `verify-receipt` | Real ed25519 signatures over RFC 8785 canonical JSON. The hash is anchored on-chain. |
-| Receipt registry for payouts made outside the escrow (`contracts/registry`, Rust) and `pnpm issue-receipt` | Real contract, on testnet. Unaudited. An issuer publishes its receipt keys and anchors each receipt's hash; anchors can't be replaced. |
+| Receipt registry for payouts made outside the escrow (`contracts/registry`, Rust), the `/issue` page and `pnpm issue-receipt` | Real contract, on testnet. Unaudited. An issuer publishes its receipt keys and anchors each receipt's hash; anchors can't be replaced. |
 | Post-quantum receipt signatures (ML-DSA-65, FIPS 204) | Real, for receipts made outside the escrow: a second signature beside ed25519, checked in the browser against the issuer's ML-DSA-65 key in the registry. Uses `@noble/post-quantum`, which has not been independently audited. Batch receipts from the escrow are still ed25519 only. |
 | Receipt format, `/verify` and CSV export | Real. The format is published as a JSON Schema with test vectors ([`docs/receipts`](docs/receipts/)). `/verify` checks a receipt against the chain in the browser and exports it as CSV once every check passes. |
 | CSV import with CLABE check-digit validation | Real |
@@ -124,7 +126,7 @@ While the web app runs, logs go to the temp folder `pnpm dev` prints, not to `.d
 
 ## Public read-only site
 
-Deployed at https://relevo-amber.vercel.app. With no settings at all, the web app runs as a read-only site for the testnet deployment: `/chain/5` (the reference run), `/firms` and `/verify`. There is no router, no signer and no keys. "New batch" is hidden, and `/rpc` only forwards view calls on the escrow and the receipt registry.
+Deployed at https://relevo-amber.vercel.app. With no settings at all, the web app runs as a read-only site for the testnet deployment: `/chain/5` (the reference run), `/firms`, `/issue` and `/verify`. There is no router and no server-side key; on `/issue` the visitor's own wallet signs. "New batch" is hidden, and `/rpc` only forwards view calls on the escrow and the receipt registry.
 
 - **Vercel:** import the GitHub repo, set **Root Directory** to `apps/web`, and deploy. No environment variables are needed.
 - **Any Node host** (Railway, Render, a VM): run `pnpm install`, then `pnpm --filter @elivo/web build`, then `pnpm --filter @elivo/web start:public`. It listens on `$PORT`.

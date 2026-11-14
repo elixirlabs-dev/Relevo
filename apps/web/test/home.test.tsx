@@ -31,8 +31,8 @@ it("on a read-only site, leads to the reference run and its receipt instead of a
     expect(getByRole("link", { name: "See the reference run →" }).getAttribute("href")).toBe("/chain/5");
     expect(getByRole("link", { name: "Verify its receipt" }).getAttribute("href")).toBe("/verify");
     expect(queryByRole("link", { name: /Start a batch/ })).toBeNull();
-    expect(navLinks(false).map((l) => l.href)).toEqual(["/firms", "/verify"]);
-    expect(navLinks(true).map((l) => l.href)).toEqual(["/new", "/firms", "/verify"]);
+    expect(navLinks(false).map((l) => l.href)).toEqual(["/firms", "/issue", "/verify"]);
+    expect(navLinks(true).map((l) => l.href)).toEqual(["/new", "/firms", "/issue", "/verify"]);
   } finally {
     if (saved !== undefined) process.env.ROUTER_URL = saved;
   }

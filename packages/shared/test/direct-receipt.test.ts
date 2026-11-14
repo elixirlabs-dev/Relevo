@@ -194,3 +194,17 @@ describe("post-quantum direct receipts (ed25519 + ML-DSA-65)", async () => {
     });
   });
 });
+
+describe("browser-side issuing", async () => {
+  const web = await import("../src/direct-build.ts");
+  const { mldsaFromSeed } = await import("../src/pq-keys.ts");
+  it("builds and signs exactly the receipt the Node signer produces, ed25519 and ML-DSA-65", () => {
+    const { rows } = web.parseResultsCsv(CSV, { rail: "SPEI" });
+    const pq = mldsaFromSeed(new Uint8Array(32).fill(7));
+    const inBrowser = web.signDirectReceiptWeb(web.buildDirectReceipt(rows, meta), key.seed, pq);
+    const inNode = signDirectReceipt(buildDirectReceipt(rows, meta), key, pq);
+    expect(inBrowser.signatures[0]).toEqual(inNode.signatures[0]);
+    expect({ ...inBrowser, signatures: [] }).toEqual({ ...inNode, signatures: [] });
+    expect(web.ed25519PublicKeyStr(key.seed)).toBe(key.publicKeyStr);
+  });
+});
