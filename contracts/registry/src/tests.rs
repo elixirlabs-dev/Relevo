@@ -181,3 +181,97 @@ fn the_caller_pays_for_the_storage_it_adds() {
     ctx(&issuer(), NearToken::from_yoctonear(0), T0);
     r.anchor("x".into(), hash(HASH_A));
 }
+
+fn anchored() -> Registry {
+    let mut r = with_keys(None);
+    ctx(&issuer(), ENOUGH, T0);
+    r.anchor("nov-payroll".into(), hash(HASH_A));
+    r
+}
+fn attest_as(r: &mut Registry, who: &str, now: u64) {
+    ctx(&acc(who), ENOUGH, now);
+    r.attest(issuer(), "nov-payroll".into(), hash(HASH_A));
+}
+
+#[test]
+fn attests_in_order_and_logs_the_event() {
+    let mut r = anchored();
+    assert!(r
+        .get_attestations(issuer(), "nov-payroll".into())
+        .is_empty());
+    attest_as(&mut r, "auditor.near", T0 + 10);
+    assert!(get_logs()
+        .iter()
+        .any(|l| l.contains("\"event\":\"receipt_attested\"")
+            && l.contains("\"attester\":\"auditor.near\"")
+            && l.contains("\"receipt_id\":\"nov-payroll\"")));
+    attest_as(&mut r, "dao-member.near", T0 + 20);
+    let v = r.get_attestations(issuer(), "nov-payroll".into());
+    assert_eq!(v.len(), 2);
+    assert_eq!(v[0].attester, acc("auditor.near"));
+    assert_eq!(v[0].attested_at_ns.0, T0 + 10);
+    assert_eq!(v[1].attester, acc("dao-member.near"));
+    assert!(r.get_attestations(issuer(), "other".into()).is_empty());
+}
+
+#[test]
+#[should_panic(expected = "not_anchored")]
+fn cannot_attest_an_unanchored_receipt() {
+    let mut r = anchored();
+    ctx(&acc("auditor.near"), ENOUGH, T0);
+    r.attest(issuer(), "nope".into(), hash(HASH_A));
+}
+
+#[test]
+#[should_panic(expected = "hash_mismatch")]
+fn cannot_attest_a_different_hash() {
+    let mut r = anchored();
+    ctx(&acc("auditor.near"), ENOUGH, T0);
+    r.attest(issuer(), "nov-payroll".into(), hash(HASH_B));
+}
+
+#[test]
+#[should_panic(expected = "already_attested")]
+fn cannot_attest_twice() {
+    let mut r = anchored();
+    attest_as(&mut r, "auditor.near", T0);
+    attest_as(&mut r, "auditor.near", T0 + 1);
+}
+
+#[test]
+#[should_panic(expected = "too_many_attestations")]
+fn caps_attestations_at_one_hundred() {
+    let mut r = anchored();
+    for i in 0..MAX_ATTESTATIONS {
+        attest_as(&mut r, &format!("a{i}.near"), T0 + i as u64);
+    }
+    assert_eq!(
+        r.get_attestations(issuer(), "nov-payroll".into()).len(),
+        MAX_ATTESTATIONS
+    );
+    attest_as(&mut r, "one-too-many.near", T0 + 1000);
+}
+
+#[test]
+#[should_panic(expected = "storage_deposit_required")]
+fn the_attester_pays_for_the_storage_it_adds() {
+    let mut r = anchored();
+    ctx(&acc("auditor.near"), NearToken::from_yoctonear(0), T0);
+    r.attest(issuer(), "nov-payroll".into(), hash(HASH_A));
+}
+
+#[test]
+fn refunds_the_unused_attest_deposit() {
+    let mut r = anchored();
+    ctx(&acc("auditor.near"), ENOUGH, T0);
+    r.attest(issuer(), "nov-payroll".into(), hash(HASH_A));
+    let refund: u128 = near_sdk::test_utils::get_created_receipts()
+        .iter()
+        .flat_map(|rc| rc.actions.iter())
+        .filter_map(|a| match a {
+            near_sdk::mock::MockAction::Transfer { deposit, .. } => Some(deposit.as_yoctonear()),
+            _ => None,
+        })
+        .sum();
+    assert!(refund > 0 && refund < ENOUGH.as_yoctonear());
+}
