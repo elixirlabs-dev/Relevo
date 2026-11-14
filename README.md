@@ -21,6 +21,7 @@
 | Check a batch **before** paying: CLABE typos, duplicate accounts, unusual amounts and changed accounts are caught in your browser; anchor the signed check report on NEAR, and a later receipt shows it was checked first | [/check](https://relevo-amber.vercel.app/check) |
 | Each payee gets a private link to their own payout only, checked against NEAR in their browser (EN/ES). It checks the payer's record, not the bank's: name-to-account matching and bank (CEP) proof are not built | links from [/issue](https://relevo-amber.vercel.app/issue) |
 | Attestations: an auditor or DAO member who verified a receipt vouches for it with their NEAR account; DAO members are labelled with their role | the payroll receipt v2 on [/verify](https://relevo-amber.vercel.app/verify) |
+| Fund from any chain with NEAR Intents (mainnet, real 1Click deposit) | [/fund](https://relevo-amber.vercel.app/fund) |
 | Two Rust contracts (escrow, receipt registry), property-tested invariants, end-to-end tests on a local NEAR sandbox | [Run the tests](#run-the-tests) |
 
 A DAO votes once to pay a batch of contributors in Mexico. The USDC locks in a NEAR escrow, and bonded payout firms deliver. A late firm is rerouted automatically and its bond pays a penalty to the DAO. Every payout ends in a signed receipt, whose hash is anchored on-chain.
@@ -56,6 +57,10 @@ No keys, accounts or funds are needed.
 
 Each firm's bond and on-chain record is at https://relevo-amber.vercel.app/firms.
 
+### Fund from any chain (mainnet, real money)
+
+This one is not part of the testnet demo: it moves real USDC. Open https://relevo-amber.vercel.app/fund, choose Base or Arbitrum, enter an amount (1 to 100 USDC), the NEAR mainnet account that should receive the USDC, and a refund address you control on the origin chain. "Get a price" asks NEAR Intents 1Click for a price and reserves nothing. "Get a deposit address" asks for a real quote and shows a one-time deposit address, the exact amount and a deadline. Send exactly that amount of USDC on that chain from your own wallet before the deadline; the page polls 1Click every 5 seconds and shows each step until the USDC is delivered on NEAR, with links to the transactions. If the swap does not go through, 1Click refunds the deposit to your refund address. The page never holds keys or sends funds, and a reload resumes where it was.
+
 ## What is real and what is simulated
 
 | Part | Status |
@@ -70,6 +75,7 @@ Each firm's bond and on-chain record is at https://relevo-amber.vercel.app/firms
 | CSV import with CLABE check-digit validation | Real |
 | Web app (`apps/web`, Next.js) | Real. Payout state comes from the escrow's view methods; the router only adds payee names (last 4 digits of the account) and tx links. |
 | Pay-in quote from ETH, BTC, SOL or Base USDC | **Real mainnet quote** from the NEAR Intents 1Click API (dry quote), shown for illustration. Nothing is sent. |
+| `/fund`: pay-in from USDC on Base or Arbitrum | **Real mainnet** NEAR Intents 1Click deposit, with real money, separate from the testnet demo. The browser calls 1Click directly; the app holds no keys and sends nothing. |
 | Payout firms MX-1, MX-2, MX-3 (`apps/firm-sim`) | **Simulated.** No MXN moves. MX-3 is configured to be late. |
 | Proof oracle and SPEI/CEP references (`apps/oracle`) | **Simulated.** Signs a proof in the shape of a CEP reference. |
 | USDC | **Mock** NEP-141 token (`contracts/mock-usdc`, "mUSDC", 6 decimals) |

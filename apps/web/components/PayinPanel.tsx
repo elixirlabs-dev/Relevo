@@ -87,6 +87,9 @@ export function PayinPanel({ totalLockedUnits }: { totalLockedUnits: string }) {
       ) : (
         <p className="muted">Fetching quote…</p>
       )}
+      <p className="small">
+        <a href="/fund">Try a real mainnet deposit on /fund</a>
+      </p>
     </Sticker>
   );
 }

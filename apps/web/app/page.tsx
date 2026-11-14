@@ -125,6 +125,10 @@ export default function Home() {
             </Button>
           </Sticker>
         </ol>
+        <p className="muted small">
+          Separate from the testnet demo: <a href="/fund">fund a NEAR account from Base or Arbitrum</a> with a
+          real NEAR Intents deposit on mainnet. That one uses real money.
+        </p>
       </section>
 
       <div className="tickets">
