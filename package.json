@@ -17,6 +17,7 @@
     "test:e2e": "vitest run --project e2e",
     "verify-receipt": "tsx packages/shared/src/bin/verify-receipt.ts",
     "issue-receipt": "tsx scripts/issue-receipt.ts",
+    "mirror-receipt": "tsx scripts/mirror-receipt.ts",
     "build:web": "pnpm --filter @elivo/web build",
     "dev": "tsx scripts/dev.ts --network sandbox",
     "dev:testnet": "tsx scripts/dev.ts --network testnet",
@@ -30,6 +31,7 @@
     "fastify": "5.12.8",
     "tsx": "4.23.15",
     "typescript": "7.0.2",
+    "viem": "2.57.13",
     "vitest": "5.1.0"
   },
   "dependencies": {

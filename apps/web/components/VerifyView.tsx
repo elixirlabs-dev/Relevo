@@ -10,6 +10,7 @@ import { Attestations, type AttestationsProps } from "./Attestations.tsx";
 import { CheckReportSheet } from "./CheckReport.tsx";
 import { DeliveryReport } from "./DeliveryReport.tsx";
 import { DirectReport } from "./DirectReport.tsx";
+import { MirrorPanel, type MirrorPanelProps } from "./MirrorPanel.tsx";
 import { ShareLink } from "./ShareLink.tsx";
 import { Button, Chip, Eyebrow, Sticker, Ticket, Window } from "./ui.tsx";
 
@@ -53,9 +54,20 @@ export interface VerifyViewProps {
   copy?: (s: string) => Promise<void>;
   /** Injectable for tests: the attestations panel's chain reads, wallet and retry delay. */
   attest?: Pick<AttestationsProps, "view" | "wallet" | "retryMs">;
+  /** Injectable for tests: the Ethereum mirror panel's reads. */
+  mirror?: Pick<MirrorPanelProps, "view" | "loadMirrors" | "getTx">;
 }
 
-export function VerifyView({ app, verify, save = saveFile, print, fragment, copy, attest }: VerifyViewProps) {
+export function VerifyView({
+  app,
+  verify,
+  save = saveFile,
+  print,
+  fragment,
+  copy,
+  attest,
+  mirror,
+}: VerifyViewProps) {
   const [text, setText] = useState("");
   const [outcome, setOutcome] = useState<VerifyOutcome | null>(null);
   const [busy, setBusy] = useState(false);
@@ -284,6 +296,15 @@ export function VerifyView({ app, verify, save = saveFile, print, fragment, copy
           text={text}
           network={app.network}
           {...attest}
+        />
+      )}
+      {outcome?.ok && outcome.hash && anchored && app.registry && app.network === "testnet" && (
+        <MirrorPanel
+          key={`mirror/${anchored.issuer}/${anchored.id}/${outcome.hash}`}
+          registry={app.registry}
+          issuer={anchored.issuer}
+          receiptId={anchored.id}
+          {...mirror}
         />
       )}
     </div>
