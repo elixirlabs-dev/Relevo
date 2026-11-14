@@ -90,8 +90,14 @@ export const DIRECT_CSV_COLUMNS = [
   "reference",
 ] as const;
 
-/** A direct receipt (payouts made outside the escrow) → CSV, one row per payout, same rules as above. */
-export function directReceiptToCsv(r: DirectReceipt, receiptHash: string): string {
+/**
+ * A direct receipt (payouts made outside the escrow; v1 or v2, same columns) → CSV, one row per payout,
+ * same rules as above.
+ */
+export function directReceiptToCsv(
+  r: Pick<DirectReceipt, "issuer" | "receipt_id" | "network" | "registry" | "currency" | "rail" | "payouts">,
+  receiptHash: string,
+): string {
   const rows = r.payouts.map((p) => {
     const row: Record<(typeof DIRECT_CSV_COLUMNS)[number], string> = {
       issuer: r.issuer,

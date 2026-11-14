@@ -37,6 +37,7 @@ const CHECK_NAME: Record<CheckId, string> = {
   signature: "Signature",
   anchor: "Anchored on-chain",
   totals: "Summary",
+  checked_before: "Checked before payment",
 };
 
 type View = <T>(contractId: string, method: string, args?: object) => Promise<T>;

@@ -13,7 +13,6 @@ import {
   isCheckReport,
   signCheckReport,
 } from "@elivo/shared/check-report";
-import { ANCHOR_DEPOSIT, KEYS_DEPOSIT } from "@elivo/shared/direct-receipt";
 import {
   type CheckCode,
   type CheckResult,
@@ -22,8 +21,8 @@ import {
   type PlannedRow,
   parsePlannedCsv,
 } from "@elivo/shared/payout-check";
-import { issuerKeys } from "./issue.ts";
-import type { FunctionCallSpec, TxSpec } from "./txs.ts";
+import { issuerKeys, publishKeysThenAnchorTx } from "./issuer.ts";
+import type { TxSpec } from "./txs.ts";
 
 /** The five invented payouts /issue starts with, as a planned batch: passes every check. */
 export const SAMPLE_PLANNED_CSV = `name,account,amount
@@ -68,8 +67,6 @@ export const FINDING_WORDS: Record<CheckCode, string> = {
 
 /** Where the signed report waits while the wallet signs (a wallet may reload the page). */
 export const PENDING_CHECK_KEY = "elivo-pending-check";
-const TGAS = 1_000_000_000_000n;
-
 type History = Record<string, string>;
 
 export function historyKey(account: string | null): string {
@@ -166,13 +163,6 @@ export type PreparedCheck =
   | { ok: true; report: CheckReport; hash: string; tx: TxSpec }
   | { ok: false; errors: string[] };
 
-function call(methodName: string, args: object, deposit: bigint): FunctionCallSpec {
-  return {
-    type: "FunctionCall",
-    params: { methodName, args, gas: (30n * TGAS).toString(), deposit: deposit.toString() },
-  };
-}
-
 /** Signs the check report with the visitor's receipt keys and builds the set_keys (if needed) + anchor tx. */
 export function prepareCheckAnchor(input: CheckAnchorInput, storage: Storage | null): PreparedCheck {
   if (!input.result.ok)
@@ -194,15 +184,16 @@ export function prepareCheckAnchor(input: CheckAnchorInput, storage: Storage | n
   } catch (e) {
     return { ok: false, errors: [(e as Error).message] };
   }
-  const wantPq = pq?.publicKeyB64 ?? null;
-  const cur = input.currentKeys;
-  const publish = !cur || cur.receipt_pk !== keys.edPk || (cur.mldsa65_pk ?? null) !== wantPq;
   const hash = checkReportHashB58(report);
-  const actions = [
-    ...(publish ? [call("set_keys", { receipt_pk: keys.edPk, mldsa65_pk: wantPq }, KEYS_DEPOSIT)] : []),
-    call("anchor", { receipt_id: report.report_id, receipt_hash: hash }, ANCHOR_DEPOSIT),
-  ];
-  return { ok: true, report, hash, tx: { receiverId: input.registry, actions } };
+  const tx = publishKeysThenAnchorTx({
+    registry: input.registry,
+    keys,
+    postQuantum: input.postQuantum,
+    currentKeys: input.currentKeys,
+    id: report.report_id,
+    hash,
+  });
+  return { ok: true, report, hash, tx };
 }
 
 /** The last check report this browser anchored for `account`: Task 4's receipts point at it. */

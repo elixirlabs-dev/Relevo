@@ -312,3 +312,97 @@ describe("VerifyView with a check report", async () => {
     expect(screen.queryByRole("button", { name: "Download CSV" })).toBeNull();
   });
 });
+
+describe("VerifyView with a v2 receipt (per-payee proofs)", async () => {
+  const { readFileSync } = await import("node:fs");
+  const text = readFileSync("apps/web/public/receipts/testnet-direct-payroll-v2.json", "utf8");
+  const v2 = JSON.parse(text);
+  const rapp = { ...app, registry: "registry.example.testnet" };
+  const ok: VerifyOutcome = {
+    receipt: null,
+    direct: null,
+    directV2: v2,
+    hash: "HV2",
+    ok: true,
+    checks: [
+      { id: "registry", ok: true, detail: "For registry.example.testnet on testnet" },
+      { id: "signature", ok: true, detail: "Signed" },
+      { id: "anchor", ok: true, detail: "Hash HV2 matches" },
+      {
+        id: "totals",
+        ok: true,
+        detail: "The payouts root, payout count and totals match the 5 payout rows",
+      },
+      {
+        id: "checked_before",
+        ok: true,
+        detail: "check anchored 2026-11-14 11:00:00 UTC, receipt anchored 2026-11-14 12:00:00 UTC",
+      },
+    ],
+  };
+
+  it("offers the v2 sample on a site with a registry, and checks that file", async () => {
+    const verify = vi.fn(async () => ok);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) =>
+        url === "/receipts/testnet-direct-payroll-v2.json"
+          ? new Response(text)
+          : new Response("", { status: 404 }),
+      ),
+    );
+    render(<VerifyView app={rapp} verify={verify} save={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "Use the payroll receipt v2 (per-payee proofs)" }));
+    await waitFor(() => expect(verify).toHaveBeenCalledWith(text));
+    cleanup();
+    render(<VerifyView app={app} verify={verify} />);
+    expect(
+      screen.queryByRole("button", { name: "Use the payroll receipt v2 (per-payee proofs)" }),
+    ).toBeNull();
+  });
+
+  it("shows the checked-before line, the report with 1-based positions, and the CSV", async () => {
+    const saved: Array<{ name: string; text: string }> = [];
+    render(
+      <VerifyView app={rapp} verify={async () => ok} save={(name, t) => saved.push({ name, text: t })} />,
+    );
+    paste(text);
+    expect(
+      await screen.findByText(
+        "✓ Checked before payment: check anchored 2026-11-14 11:00:00 UTC, receipt anchored 2026-11-14 12:00:00 UTC",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Delivery report" })).toBeTruthy();
+    expect(
+      screen.getByText(/Receipt payroll-2026-11-v2 · issued by payroll.pg-1794403941.testnet/),
+    ).toBeTruthy();
+    const cells = screen
+      .getAllByRole("row")
+      .slice(1)
+      .map((r) => r.querySelector("td")?.textContent);
+    expect(cells).toEqual(["1", "2", "3", "4", "5"]);
+    expect(screen.getByText(/Merkle root/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Download CSV" }));
+    expect(saved[0].name).toBe("elivo-payroll.pg-1794403941.testnet-payroll-2026-11-v2.csv");
+  });
+
+  it("names a failed checked-before line and shows no report", async () => {
+    const bad: VerifyOutcome = {
+      ...ok,
+      ok: false,
+      checks: [
+        ...ok.checks.slice(0, 4),
+        {
+          id: "checked_before",
+          ok: false,
+          detail:
+            "The check was anchored at 2026-11-14 13:00:00 UTC, not before the receipt (2026-11-14 12:00:00 UTC): it was not made before payment",
+        },
+      ],
+    };
+    render(<VerifyView app={rapp} verify={async () => bad} save={() => {}} />);
+    paste(text);
+    expect(await screen.findByText(/✗ Checked before payment: The check was anchored at/)).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Delivery report" })).toBeNull();
+  });
+});

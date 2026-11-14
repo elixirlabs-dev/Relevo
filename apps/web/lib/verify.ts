@@ -11,12 +11,23 @@ import {
   directTotalsProblems,
   isDirectReceipt,
 } from "@elivo/shared/direct-receipt";
-import { directHashB58Web, verifyDirectSignaturesWeb } from "@elivo/shared/direct-verify-web";
+import {
+  type DirectReceiptV2,
+  directV2HashB58Web,
+  isDirectReceiptV2,
+  verifyDirectV2SignaturesWeb,
+  verifyDirectV2Structure,
+} from "@elivo/shared/direct-receipt-v2";
+import {
+  directHashB58Web,
+  type IssuerKeys,
+  verifyDirectSignaturesWeb,
+} from "@elivo/shared/direct-verify-web";
 import type { Receipt, VerifyResult } from "@elivo/shared/receipt";
 import { receiptHashB58Web, totalsProblems, verifyReceiptWeb } from "@elivo/shared/receipt-web";
 import { viewCall } from "./rpc.ts";
 
-export type CheckId = "format" | "escrow" | "registry" | "signature" | "anchor" | "totals";
+export type CheckId = "format" | "escrow" | "registry" | "signature" | "anchor" | "totals" | "checked_before";
 export interface Check {
   id: CheckId;
   ok: boolean;
@@ -27,6 +38,8 @@ export interface VerifyOutcome {
   receipt: Receipt | null;
   /** A receipt for payouts made outside the escrow (elivo-direct-receipt-1). */
   direct: DirectReceipt | null;
+  /** A direct receipt with per-payee proofs (elivo-direct-receipt-2). */
+  directV2?: DirectReceiptV2 | null;
   /** A check report for a batch, made before paying it (elivo-check-report-1). */
   check?: CheckReport | null;
   checks: Check[];
@@ -37,7 +50,18 @@ export interface VerifyOutcome {
 type View = <T>(contractId: string, method: string, args?: object) => Promise<T>;
 
 /** The format check's message for a file that is none of the documents /verify accepts. */
-export const NOT_A_RECEIPT = "Not an elivo-receipt-1, elivo-direct-receipt-1 or elivo-check-report-1 file";
+export const NOT_A_RECEIPT =
+  "Not an elivo-receipt-1, elivo-direct-receipt-1, elivo-direct-receipt-2 or elivo-check-report-1 file";
+
+/** "2026-11-14 12:00:00 UTC" for a NEAR block timestamp in nanoseconds (as the registry returns it). */
+export function nsToUtc(ns: string | number): string {
+  try {
+    const ms = Number(BigInt(ns) / 1_000_000n);
+    return `${new Date(ms).toISOString().slice(0, 19).replace("T", " ")} UTC`;
+  } catch {
+    return "an unknown time";
+  }
+}
 
 function parse(input: string): Receipt | null {
   try {
@@ -76,6 +100,7 @@ export async function verifyAgainstChain(
   try {
     json = JSON.parse(input);
   } catch {}
+  if (isDirectReceiptV2(json)) return verifyDirectV2(json, app, view);
   if (isDirectReceipt(json)) return verifyDirect(json, app, view);
   if (isCheckReport(json)) return verifyCheckReport(json, app, view);
   const r = parse(input);
@@ -160,10 +185,13 @@ export async function verifyAgainstChain(
 }
 
 interface RegistryAnchor {
+  issuer?: string;
   receipt_hash: string;
   receipt_pk: string;
   mldsa65_pk: string | null;
   key_version: number;
+  /** U64 as a JSON string */
+  anchored_at_ns?: string;
 }
 
 /** A document anchored in the receipt registry: a direct receipt or a check report. */
@@ -179,16 +207,25 @@ interface RegistryDocument {
  * and network from this app's config, the issuer's keys and the anchored hash from the registry's
  * get_receipt (keyed by the issuer account and the document's id). Then `totals` adds the last check.
  */
-async function verifyRegistryDocument(
-  r: RegistryDocument,
-  doc: { id: string; noun: string; totals: () => Check },
+async function verifyRegistryDocument<T extends RegistryDocument>(
+  r: T,
+  doc: {
+    id: string;
+    noun: string;
+    totals: () => Check;
+    /** How this format signs and hashes (default: v1, over the whole document). */
+    signatures?: (r: T, keys: IssuerKeys) => Promise<VerifyResult>;
+    hash?: (r: T) => Promise<string>;
+  },
   app: { network: string; registry?: string | null },
   view: View,
-): Promise<{ checks: Check[]; hash: string | null; ok: boolean }> {
+): Promise<{ checks: Check[]; hash: string | null; ok: boolean; anchor: RegistryAnchor | null }> {
   const checks: Check[] = [];
+  let anchor: RegistryAnchor | null = null;
   const done = (hash: string | null) => ({
     checks,
     hash,
+    anchor,
     ok: checks.length === 4 && checks.every((c) => c.ok),
   });
   const registry = app.registry ?? null;
@@ -204,9 +241,11 @@ async function verifyRegistryDocument(
   });
   if (!same || !registry) return done(null);
 
-  let anchor: RegistryAnchor | null;
   try {
-    anchor = await view(registry, "get_receipt", { issuer: r.issuer, receipt_id: doc.id });
+    anchor = await view<RegistryAnchor | null>(registry, "get_receipt", {
+      issuer: r.issuer,
+      receipt_id: doc.id,
+    });
   } catch (e) {
     checks.push({ id: "anchor", ok: false, detail: `Could not read the chain: ${(e as Error).message}` });
     return done(null);
@@ -220,7 +259,7 @@ async function verifyRegistryDocument(
     return done(null);
   }
 
-  const v = await verifyDirectSignaturesWeb(r, anchor);
+  const v = await (doc.signatures ?? verifyDirectSignaturesWeb)(r, anchor);
   const filePk = r.signatures.find((s) => s?.alg === "ed25519")?.public_key ?? "no key";
   checks.push({
     id: "signature",
@@ -236,7 +275,7 @@ async function verifyRegistryDocument(
           ),
   });
 
-  const hash = await directHashB58Web(r);
+  const hash = await (doc.hash ?? directHashB58Web)(r);
   checks.push(
     anchor.receipt_hash === hash
       ? { id: "anchor", ok: true, detail: `Hash ${hash} matches the hash ${r.issuer} anchored on-chain` }
@@ -276,7 +315,96 @@ async function verifyDirect(
     app,
     view,
   );
-  return { receipt: null, direct: r, check: null, ...out };
+  const { anchor: _a, ...rest } = out;
+  return { receipt: null, direct: r, check: null, ...rest };
+}
+
+const STRUCTURE_WORDS: Record<string, string> = {
+  payout_ids: "payout ids",
+  payouts_root_mismatch: "payouts root",
+  payout_count_mismatch: "payout count",
+  totals_mismatch: "totals",
+};
+
+/**
+ * A v2 receipt, keyed in the registry by its receipt id. The signatures and the anchored hash cover the
+ * header (which commits to the rows through `payouts_root`); the structure check ties the rows to it.
+ * When the receipt names the check made before paying, one more check reads that check's anchor.
+ */
+async function verifyDirectV2(
+  r: DirectReceiptV2,
+  app: { network: string; registry?: string | null },
+  view: View,
+): Promise<VerifyOutcome> {
+  const out = await verifyRegistryDocument(
+    r,
+    {
+      id: r.receipt_id,
+      noun: "receipt",
+      signatures: verifyDirectV2SignaturesWeb,
+      hash: directV2HashB58Web,
+      totals: () => {
+        const problems = verifyDirectV2Structure(r);
+        return {
+          id: "totals",
+          ok: problems.length === 0,
+          detail:
+            problems.length === 0
+              ? `The payouts root, payout count and totals match the ${r.payouts.length} payout rows`
+              : `These don't match the payout rows: ${problems.map((p) => STRUCTURE_WORDS[p] ?? p).join(", ")}`,
+        };
+      },
+    },
+    app,
+    view,
+  );
+  const { anchor, ...rest } = out;
+  const result: VerifyOutcome = { receipt: null, direct: null, directV2: r, check: null, ...rest };
+  if (!r.check_ref || !anchor || !app.registry) return result;
+  const before = await checkedBefore(r, r.check_ref, anchor, app.registry, view);
+  return { ...result, checks: [...rest.checks, before], ok: rest.ok && before.ok };
+}
+
+/**
+ * "Checked before payment": the check named in `check_ref` is anchored by the same issuer, with the
+ * hash the receipt names, strictly earlier than the receipt.
+ */
+async function checkedBefore(
+  r: DirectReceiptV2,
+  ref: { report_id: string; report_hash: string },
+  receiptAnchor: RegistryAnchor,
+  registry: string,
+  view: View,
+): Promise<Check> {
+  const fail = (detail: string): Check => ({ id: "checked_before", ok: false, detail });
+  let a: RegistryAnchor | null;
+  try {
+    a = await view<RegistryAnchor | null>(registry, "get_receipt", {
+      issuer: r.issuer,
+      receipt_id: ref.report_id,
+    });
+  } catch (e) {
+    return fail(`Could not read the check's anchor from the chain: ${(e as Error).message}`);
+  }
+  if (!a || (a.issuer !== undefined && a.issuer !== r.issuer))
+    return fail(`${r.issuer} has anchored no check "${ref.report_id}" on ${registry}`);
+  if (a.receipt_hash !== ref.report_hash)
+    return fail(
+      `The check "${ref.report_id}" anchored on-chain has hash ${a.receipt_hash}, not the ${ref.report_hash} this receipt names`,
+    );
+  let earlier = false;
+  try {
+    earlier = BigInt(a.anchored_at_ns ?? "x") < BigInt(receiptAnchor.anchored_at_ns ?? "x");
+  } catch {
+    return fail("The registry did not say when the check and the receipt were anchored");
+  }
+  const checkAt = nsToUtc(a.anchored_at_ns as string);
+  const receiptAt = nsToUtc(receiptAnchor.anchored_at_ns as string);
+  return earlier
+    ? { id: "checked_before", ok: true, detail: `check anchored ${checkAt}, receipt anchored ${receiptAt}` }
+    : fail(
+        `The check was anchored at ${checkAt}, not before the receipt (${receiptAt}): it was not made before payment`,
+      );
 }
 
 /** A check report, keyed in the registry by its report id. */
@@ -305,5 +433,6 @@ async function verifyCheckReport(
     app,
     view,
   );
-  return { receipt: null, direct: null, check: r, ...out };
+  const { anchor: _a, ...rest } = out;
+  return { receipt: null, direct: null, check: r, ...rest };
 }

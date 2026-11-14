@@ -1,4 +1,5 @@
 import type { DirectPayout, DirectReceipt } from "@elivo/shared/direct-receipt";
+import type { DirectReceiptV2 } from "@elivo/shared/direct-receipt-v2";
 import { LABEL } from "@elivo/shared/label";
 import { Button, Eyebrow } from "./ui.tsx";
 
@@ -9,19 +10,20 @@ function outcome(p: DirectPayout): string {
 }
 
 /**
- * The delivery report for a direct receipt (payouts the issuer made itself, outside the escrow) that has
- * passed every check on /verify. Prints on its own, like the batch report.
+ * The delivery report for a direct receipt (payouts the issuer made itself, outside the escrow; v1 or v2)
+ * that has passed every check on /verify. Prints on its own, like the batch report. Positions are 1-based.
  */
 export function DirectReport({
   receipt: r,
   hash,
   print = () => window.print(),
 }: {
-  receipt: DirectReceipt;
+  receipt: DirectReceipt | DirectReceiptV2;
   hash: string;
   print?: () => void;
 }) {
   const paid = r.payouts.filter((p) => p.status === "Paid").length;
+  const v2 = r.version === "elivo-direct-receipt-2" ? (r as DirectReceiptV2) : null;
   return (
     <section className="report sheet" aria-labelledby="report-title">
       <div className="row" style={{ justifyContent: "space-between" }}>
@@ -52,7 +54,7 @@ export function DirectReport({
           <tbody>
             {r.payouts.map((p) => (
               <tr key={p.id}>
-                <td>{p.id}</td>
+                <td>{p.id + 1}</td>
                 <td>{`account ****${p.account_last4}`}</td>
                 <td>{p.amount}</td>
                 <td>{outcome(p)}</td>
@@ -67,6 +69,16 @@ export function DirectReport({
         Receipt hash <code style={{ wordBreak: "break-all" }}>{hash}</code>
         {`, anchored by ${r.issuer} in ${r.registry}. These payouts were made outside the escrow: the receipt proves what the issuer signed and anchored, not that a bank confirmed each transfer. Payees are identified only by the last 4 digits of their account.`}
       </p>
+      {v2 && (
+        <p className="small">
+          {"Merkle root "}
+          <code style={{ wordBreak: "break-all" }}>{v2.payouts_root}</code>
+          {` over the ${v2.payout_count} payouts. The signatures and the anchor cover this root, so each payee can be given a proof of their own payout that shows nobody else's.`}
+          {v2.check_ref
+            ? ` The batch was checked before payment: check report ${v2.check_ref.report_id}.`
+            : " No check made before payment is linked."}
+        </p>
+      )}
       <p className="small muted">{LABEL}</p>
     </section>
   );

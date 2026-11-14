@@ -18,6 +18,7 @@ const CHECK_NAME: Record<CheckId, string> = {
   signature: "Signature",
   anchor: "Anchored on-chain",
   totals: "Totals",
+  checked_before: "Checked before payment",
 };
 
 /** Hands the browser a file to save (a Blob link, clicked once). */
@@ -97,7 +98,7 @@ export function VerifyView({ app, verify, save = saveFile, print, fragment, copy
   }, []);
 
   const r = outcome?.receipt;
-  const d = outcome?.direct;
+  const d = outcome?.direct ?? outcome?.directV2;
   const c = outcome?.check;
   const status = !outcome ? "idle" : outcome.ok ? "done" : "offline";
   return (
@@ -112,6 +113,11 @@ export function VerifyView({ app, verify, save = saveFile, print, fragment, copy
           {app.network === "testnet" && app.registry && (
             <Button onClick={() => sample("/receipts/testnet-direct-payroll-pq.json")} disabled={busy}>
               Use a payroll receipt made outside the escrow (post-quantum signed)
+            </Button>
+          )}
+          {app.network === "testnet" && app.registry && (
+            <Button onClick={() => sample("/receipts/testnet-direct-payroll-v2.json")} disabled={busy}>
+              Use the payroll receipt v2 (per-payee proofs)
             </Button>
           )}
           <label className="tag">
