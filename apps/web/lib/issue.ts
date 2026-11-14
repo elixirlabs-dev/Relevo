@@ -29,7 +29,7 @@ Diego Navarro,072180009876543213,46250.00,paid,2026-11-14T15:03:05Z,SIM-SPEI-202
 Valentina Cruz,646180005555555554,18500.00,paid,2026-11-14T15:03:31Z,SIM-SPEI-20261114-0005
 `;
 
-/** Where the signed receipt waits while the wallet signs (MyNearWallet reloads the page). */
+/** Where the signed receipt waits while the wallet signs (a wallet may reload the page). */
 export const PENDING_KEY = "elivo-pending-receipt";
 const TGAS = 1_000_000_000_000n;
 

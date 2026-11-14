@@ -66,7 +66,7 @@ export function walletSigner(
   return {
     mode: "wallet",
     accountId: port.accountId(),
-    signIn: (walletId = "my-near-wallet") => port.signIn(walletId),
+    signIn: (walletId = "meteor-wallet") => port.signIn(walletId),
     propose: async (draftId) => {
       const p = (await postJson(`/router/batches/${encodeURIComponent(draftId)}/proposal`, {})) as {
         contractId: string;

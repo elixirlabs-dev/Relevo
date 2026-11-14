@@ -1,14 +1,15 @@
 "use client";
 /**
  * Wallet Selector core with three testnet wallets and our own buttons (modal-ui pins React 18):
- * MyNearWallet and Intear (web wallets) and Sender (browser extension).
- * Left out: Meteor (its selector module pins an SDK that needs near-api-js 6) and HERE (it pulls in an
- * old copy of the @near-js packages).
+ * Meteor and Intear (web wallets that can create a testnet account) and Sender (browser extension).
+ * Meteor's selector module pins an SDK that needs near-api-js 6, so the web app depends on near-api-js 6
+ * for it while the shared code keeps near-api-js 7. Left out: MyNearWallet (retired: since November 2026 it
+ * no longer creates accounts or approves app transactions) and HERE (it pulls in an old copy of @near-js).
  */
 import { actionCreators } from "@near-js/transactions";
 import { setupWalletSelector, type WalletSelector } from "@near-wallet-selector/core";
 import { setupIntearWallet } from "@near-wallet-selector/intear-wallet";
-import { setupMyNearWallet } from "@near-wallet-selector/my-near-wallet";
+import { setupMeteorWallet } from "@near-wallet-selector/meteor-wallet";
 import { setupSender } from "@near-wallet-selector/sender";
 import type { WalletPort } from "./signer.ts";
 import type { TxSpec } from "./txs.ts";
@@ -18,13 +19,13 @@ let selector: Promise<WalletSelector> | null = null;
 function getSelector(): Promise<WalletSelector> {
   selector ??= setupWalletSelector({
     network: "testnet",
-    modules: [setupMyNearWallet(), setupIntearWallet(), setupSender()],
+    modules: [setupMeteorWallet(), setupIntearWallet(), setupSender()],
   });
   return selector;
 }
 
 export const WALLETS = [
-  { id: "my-near-wallet", name: "MyNearWallet" },
+  { id: "meteor-wallet", name: "Meteor Wallet" },
   { id: "intear-wallet", name: "Intear Wallet" },
   { id: "sender", name: "Sender" },
 ] as const;

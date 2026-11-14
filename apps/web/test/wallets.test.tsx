@@ -10,7 +10,7 @@ const signIn = vi.fn(async (id: string) => {
 });
 vi.mock("../lib/wallet.ts", () => ({
   WALLETS: [
-    { id: "my-near-wallet", name: "MyNearWallet" },
+    { id: "meteor-wallet", name: "Meteor Wallet" },
     { id: "intear-wallet", name: "Intear Wallet" },
     { id: "sender", name: "Sender" },
   ],
@@ -43,7 +43,7 @@ it("offers every wallet, signs in with the one chosen, and shows why a wallet co
     vi.fn(async () => Response.json({}, { status: 404 })),
   );
   render(<DaoVote draftId="d-1" cfg={cfg} funded={false} pollMs={60_000} />);
-  for (const name of ["MyNearWallet", "Intear Wallet", "Sender"])
+  for (const name of ["Meteor Wallet", "Intear Wallet", "Sender"])
     expect(await screen.findByRole("button", { name: `Connect ${name}` })).toBeTruthy();
 
   fireEvent.click(screen.getByRole("button", { name: "Connect Sender" }));

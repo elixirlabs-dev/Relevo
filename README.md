@@ -36,7 +36,7 @@ No keys, accounts or funds are needed.
 3. **Tamper with it.** Download the [reference receipt](apps/web/public/receipts/testnet-batch-5.json), change any amount, and upload it on the same page. The signature check fails.
 4. **Check a post-quantum receipt for payouts made outside the escrow.** On the same page, choose "Use a payroll receipt made outside the escrow (post-quantum signed)". A sample payroll issuer paid five contractors on its own, then signed the receipt twice, with ed25519 and with ML-DSA-65 (FIPS 204, post-quantum), and anchored it in the receipt registry. The same four checks run against the registry, and both signatures must match the keys the issuer published on-chain.
 
-5. **Issue your own receipt, with your own wallet.** Open https://relevo-amber.vercel.app/issue, connect a NEAR testnet wallet (MyNearWallet, Intear or Sender), and sign the sample payouts or your own. Your browser signs the receipt (ed25519 plus an optional ML-DSA-65 post-quantum signature); names and account numbers never leave it. One wallet transaction publishes your receipt keys and anchors the receipt in the registry, then the page verifies it against the chain. It costs about 0.025 testnet NEAR of storage.
+5. **Issue your own receipt, with your own wallet.** Open https://relevo-amber.vercel.app/issue, connect a NEAR testnet wallet (Meteor, Intear or Sender; Meteor and Intear can create a testnet account in a minute), and sign the sample payouts or your own. Your browser signs the receipt (ed25519 plus an optional ML-DSA-65 post-quantum signature); names and account numbers never leave it. One wallet transaction publishes your receipt keys and anchors the receipt in the registry, then the page verifies it against the chain. It costs about 0.025 testnet NEAR of storage.
 
 Each firm's bond and on-chain record is at https://relevo-amber.vercel.app/firms.
 
@@ -109,7 +109,7 @@ The public key always comes from the chain (`--chain`) or from you (`--pubkey`),
 2. **Quote**: payees with the last 4 digits only, payouts, the 25 bps fee buffer, the total to lock, the fixed rate and the deadlines. Below that is a live 1Click pay-in quote (ETH, BTC, SOL or Base USDC). It is a mainnet price for illustration; 1Click's own app fee is shown.
 3. **Propose & vote** (`/batches/<id>`): create the Sputnik DAO proposal, then approve it as the council.
    - On the sandbox, a **demo signer** labelled "Demo signer: local sandbox keys, not a wallet" signs with the local council key. It only signs this app's funding proposal.
-   - On testnet (`pnpm dev:testnet`), the DAO steps are signed with a wallet: MyNearWallet, Intear Wallet or the Sender extension. Anyone can create the proposal, and only a council member can approve it. Like `make demo-testnet`, this runs the router with the deployer's keys, so only whoever created the deployment can run it. It changes nothing on-chain at start-up. Without those keys, use `pnpm web:testnet` (read-only).
+   - On testnet (`pnpm dev:testnet`), the DAO steps are signed with a wallet: Meteor Wallet, Intear Wallet or the Sender extension. Anyone can create the proposal, and only a council member can approve it. Like `make demo-testnet`, this runs the router with the deployer's keys, so only whoever created the deployment can run it. It changes nothing on-chain at start-up. Without those keys, use `pnpm web:testnet` (read-only).
 4. **Live status**: each payout's state, route (e.g. MX-3 → MX-2), the penalty paid to the DAO, the proof reference and tx links. When the batch completes it shows the anchored receipt hash, a receipt download and the `verify-receipt` command.
 
 5. **Verify** (`/verify`): upload or paste a receipt, or on testnet load the reference receipt for batch 5. Your browser runs four checks and shows the result of each:
@@ -297,7 +297,7 @@ What stands between this prototype and production, what to improve next, and whe
 - A custodian-held second release key.
 - Sealed commit-reveal quotes; the full set of exclusion reason codes (bank outage, rejection, wrong details).
 - Pay-in through 1Click for real (today the app shows a dry quote only).
-- More wallets in the web app: Meteor, HOT, Ledger and MPC wallets (MyNearWallet, Intear and Sender today; Meteor's selector module still needs near-api-js 6).
+- More wallets in the web app: HOT, Ledger and MPC wallets (Meteor, Intear and Sender today). MyNearWallet was dropped: it was retired in November 2026.
 - An audit before any real funds.
 
 Further out:

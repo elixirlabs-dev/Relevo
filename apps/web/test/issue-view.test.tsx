@@ -6,7 +6,7 @@ import type { WalletPort } from "../lib/signer.ts";
 import type { TxSpec } from "../lib/txs.ts";
 
 const cfg = { network: "testnet" as const, escrow: "escrow.t", registry: "registry.example.testnet" };
-const wallets = [{ id: "my-near-wallet", name: "MyNearWallet" }];
+const wallets = [{ id: "meteor-wallet", name: "Meteor Wallet" }];
 
 /** A fake chain: the registry remembers what the wallet's transaction published and anchored. */
 function fakeChain() {
@@ -49,7 +49,7 @@ describe("IssueView", () => {
   it("asks for a wallet before it can sign", () => {
     const c = fakeChain();
     render(<IssueView cfg={cfg} wallet={{ port: port(null, c.apply), wallets }} view={c.view} retryMs={1} />);
-    expect(screen.getByRole("button", { name: "Connect MyNearWallet" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Connect Meteor Wallet" })).toBeTruthy();
     expect(
       (screen.getByRole("button", { name: "Sign and anchor the receipt" }) as HTMLButtonElement).disabled,
     ).toBe(true);
