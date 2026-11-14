@@ -1,1 +1,10 @@
-[]
+[
+  {
+    "issuer": "payroll.pg-1794403941.testnet",
+    "receipt_id": "payroll-2026-11-v2",
+    "receipt_hash": "GH9EJmu5ATgNoGy7nwRobabJhFWua1XMWzUhXNwsFrCZ",
+    "chain": "sepolia",
+    "tx_hash": "0x310ff25bcd4ee30a92f7450b67e3f76f7ebcd6a0b73f3f03285b74fcf94beb92",
+    "from": "0xd58bd0be27a98d505c73bb4e24722cacf4342f8e"
+  }
+]
