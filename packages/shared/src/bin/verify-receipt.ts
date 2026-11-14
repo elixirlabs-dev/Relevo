@@ -1,9 +1,12 @@
 /**
  * verify-receipt <file> --pubkey <ed25519:...>
- * verify-receipt <file> --chain --rpc <url> --escrow <account>
+ * verify-receipt <file> --chain --rpc <url> --escrow <account>      (a batch receipt, elivo-receipt-1)
+ * verify-receipt <file> --chain --rpc <url> --registry <account>    (a direct receipt, elivo-direct-receipt-1)
  * Prints OK (exit 0) or FAIL: <reason> (exit 1). A key embedded in the file is never trusted alone.
  */
 import { readFileSync } from "node:fs";
+import { type DirectReceipt, directTotalsProblems, isDirectReceipt } from "../direct-receipt.ts";
+import { directHashB58Web, type IssuerKeys, verifyDirectSignaturesWeb } from "../direct-verify-web.ts";
 import { type Receipt, receiptHashB58, verifyReceipt } from "../receipt.ts";
 
 function arg(name: string): string | undefined {
@@ -30,6 +33,7 @@ async function main() {
   } catch {
     fail("unreadable");
   }
+  if (isDirectReceipt(receipt)) return verifyDirect(receipt);
   let expected = arg("--pubkey");
   let anchored: string | null | undefined;
   if (process.argv.includes("--chain")) {
@@ -57,6 +61,33 @@ async function main() {
     if (!anchored) fail("not_anchored");
     if (anchored !== receiptHashB58(receipt)) fail("hash_mismatch");
   }
+  console.log("OK");
+}
+
+async function verifyDirect(r: DirectReceipt) {
+  const rpc = arg("--rpc");
+  const registry = arg("--registry");
+  const pubkey = arg("--pubkey");
+  let keys: IssuerKeys | undefined;
+  let anchored: string | undefined;
+  if (process.argv.includes("--chain")) {
+    if (!registry) fail("--chain needs --registry (the file's registry is not trusted)");
+    if (!rpc) fail("missing --rpc");
+    const { Chain } = await import("../chain.ts");
+    const chain = new Chain({ rpcUrl: rpc, network: "testnet" });
+    const a = await chain.view<(IssuerKeys & { receipt_hash: string }) | null>(registry, "get_receipt", {
+      issuer: r.issuer,
+      receipt_id: r.receipt_id,
+    });
+    if (!a) fail("not_anchored");
+    keys = a;
+    anchored = a.receipt_hash;
+  } else if (pubkey) keys = { receipt_pk: pubkey };
+  if (!keys) fail("no expected public key (use --pubkey or --chain)");
+  const v = await verifyDirectSignaturesWeb(r, keys);
+  if (!v.ok) fail(v.reason);
+  if (anchored !== undefined && anchored !== (await directHashB58Web(r))) fail("hash_mismatch");
+  if (directTotalsProblems(r).length) fail("totals_mismatch");
   console.log("OK");
 }
 

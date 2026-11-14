@@ -10,6 +10,8 @@ export interface WebConfig {
   signer: "demo" | "wallet";
   routerAvailable: boolean;
   explorer: string | null;
+  /** Receipt registry for payouts made outside the escrow, if the deployment has one. */
+  registry: string | null;
   /** The NEAR RPC the deployment uses (shown in the verify command; the browser itself uses /rpc). */
   rpcUrl: string;
 }

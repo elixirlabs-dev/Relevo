@@ -1,15 +1,17 @@
 "use client";
 import { LABEL } from "@elivo/shared/label";
 import { formatUsdc } from "@elivo/shared/money";
-import { receiptToCsv } from "@elivo/shared/receipt-csv";
+import { directReceiptToCsv, receiptToCsv } from "@elivo/shared/receipt-csv";
 import { useRef, useState } from "react";
 import { type CheckId, type VerifyOutcome, verifyAgainstChain } from "../lib/verify.ts";
 import { DeliveryReport } from "./DeliveryReport.tsx";
+import { DirectReport } from "./DirectReport.tsx";
 import { Button, Chip, Eyebrow, Sticker, Ticket, Window } from "./ui.tsx";
 
 const CHECK_NAME: Record<CheckId, string> = {
   format: "File",
   escrow: "Escrow",
+  registry: "Registry",
   signature: "Signature",
   anchor: "Anchored on-chain",
   totals: "Totals",
@@ -26,8 +28,8 @@ function saveFile(name: string, text: string) {
 }
 
 export interface VerifyViewProps {
-  /** Escrow and network from this app's config: what a receipt must belong to. */
-  app: { escrow: string; network: "sandbox" | "testnet" };
+  /** Escrow, registry and network from this app's config: what a receipt must belong to. */
+  app: { escrow: string; network: "sandbox" | "testnet"; registry?: string | null };
   /** Injectable for tests. */
   verify?: (input: string) => Promise<VerifyOutcome>;
   save?: (name: string, text: string) => void;
@@ -66,25 +68,31 @@ export function VerifyView({ app, verify, save = saveFile, print }: VerifyViewPr
     }
   };
 
-  const reference = async () => {
+  const sample = async (path: string) => {
     try {
-      const r = await fetch("/receipts/testnet-batch-5.json");
+      const r = await fetch(path);
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       await run(await r.text());
     } catch (e) {
-      setError(`Could not load the reference receipt: ${(e as Error).message}`);
+      setError(`Could not load the sample receipt: ${(e as Error).message}`);
     }
   };
 
   const r = outcome?.receipt;
+  const d = outcome?.direct;
   const status = !outcome ? "idle" : outcome.ok ? "done" : "offline";
   return (
     <div className="stack">
       <Window title="~/verify" status={status}>
         <div className="row" style={{ marginBottom: 14 }}>
           {app.network === "testnet" && (
-            <Button onClick={reference} disabled={busy}>
+            <Button onClick={() => sample("/receipts/testnet-batch-5.json")} disabled={busy}>
               Use the testnet reference receipt (batch 5)
+            </Button>
+          )}
+          {app.network === "testnet" && app.registry && (
+            <Button onClick={() => sample("/receipts/testnet-direct-payroll.json")} disabled={busy}>
+              Use a payroll receipt made outside the escrow
             </Button>
           )}
           <label className="tag">
@@ -112,7 +120,7 @@ export function VerifyView({ app, verify, save = saveFile, print }: VerifyViewPr
           </Button>
         </div>
         <p className="muted small" style={{ marginTop: 12 }}>
-          {`Checked against ${app.escrow} on ${app.network}: the receipt key and anchored hash come from the chain, never from the file. ${LABEL}`}
+          {`Checked against ${app.escrow}${app.registry ? ` and the receipt registry ${app.registry}` : ""} on ${app.network}: the receipt key and anchored hash come from the chain, never from the file. ${LABEL}`}
         </p>
       </Window>
 
@@ -163,6 +171,26 @@ export function VerifyView({ app, verify, save = saveFile, print }: VerifyViewPr
             </Button>
           </div>
           <DeliveryReport receipt={r} hash={outcome.hash} print={print} />
+        </div>
+      )}
+
+      {outcome?.ok && d && outcome.hash && (
+        <div className="stack">
+          <div className="tickets">
+            <Ticket label="Payouts" value={String(d.payouts.length)} />
+            <Ticket label="Paid" value={d.totals.paid} unit={d.currency} />
+            <Ticket label="Not paid" value={d.totals.not_paid} unit={d.currency} tone="peach" />
+          </div>
+          <div>
+            <Button
+              onClick={() =>
+                save(`elivo-${d.issuer}-${d.receipt_id}.csv`, directReceiptToCsv(d, outcome.hash as string))
+              }
+            >
+              Download CSV
+            </Button>
+          </div>
+          <DirectReport receipt={d} hash={outcome.hash} print={print} />
         </div>
       )}
     </div>

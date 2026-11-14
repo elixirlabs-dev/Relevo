@@ -17,6 +17,7 @@ const cfg: WebConfig = {
   routerAvailable: true,
   explorer: null,
   rpcUrl: "http://127.0.0.1:3030",
+  registry: null,
 };
 const bytes = (v: unknown) => Array.from(new TextEncoder().encode(JSON.stringify(v)));
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

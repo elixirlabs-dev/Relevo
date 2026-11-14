@@ -15,7 +15,7 @@ A DAO votes once to pay a batch of contributors in Mexico. The USDC locks in a N
 - **Payroll and contractor platforms:** settle "I wasn't paid" with a per-payout proof, and give auditors a CSV that verifies.
 - **Payout providers:** post a bond, deliver on time, and build an on-chain delivery record.
 
-The receipt comes first; the escrow and bonds are the stronger level on top of it (see the product ladder in [docs/production-readiness.md](docs/production-readiness.md)).
+The receipt comes first, and it works without the escrow too: an issuer that pays on any rail can sign a receipt for those payouts and anchor it in the receipt registry. The escrow and bonds are the stronger level on top (see the product ladder in [docs/production-readiness.md](docs/production-readiness.md)).
 
 ## Try it
 
@@ -32,6 +32,7 @@ No keys, accounts or funds are needed.
 
    Open http://localhost:3000/verify and choose "Use the testnet reference receipt (batch 5)". Four checks run in your browser, and all four pass.
 3. **Tamper with it.** Download the [reference receipt](apps/web/public/receipts/testnet-batch-5.json), change any amount, and upload it on the same page. The signature check fails.
+4. **Check a receipt for payouts made outside the escrow.** On the same page, choose "Use a payroll receipt made outside the escrow". A sample payroll issuer paid five contractors on its own, then signed and anchored a receipt in the receipt registry. The same four checks run against the registry.
 
 The same site shows the batch straight from the contract at http://localhost:3000/chain/5 and each firm's bond and record at http://localhost:3000/firms.
 
@@ -43,6 +44,7 @@ The same site shows the batch straight from the contract at http://localhost:300
 | Sputnik DAO v2 vote that funds the batch | Real DAO from the official testnet factory (`sputnikv2.testnet`) |
 | Router: quotes, assignment, reroute, settle, refund, receipt anchoring (`apps/router`) | Real service. It signs only with a function-call key limited to six escrow methods. |
 | Signed receipts and `verify-receipt` | Real ed25519 signatures over RFC 8785 canonical JSON. The hash is anchored on-chain. |
+| Receipt registry for payouts made outside the escrow (`contracts/registry`, Rust) and `pnpm issue-receipt` | Real contract, on testnet. Unaudited. An issuer publishes its receipt keys and anchors each receipt's hash; anchors can't be replaced. |
 | Receipt format, `/verify` and CSV export | Real. The format is published as a JSON Schema with test vectors ([`docs/receipts`](docs/receipts/)). `/verify` checks a receipt against the chain in the browser and exports it as CSV once every check passes. |
 | CSV import with CLABE check-digit validation | Real |
 | Web app (`apps/web`, Next.js) | Real. Payout state comes from the escrow's view methods; the router only adds payee names (last 4 digits of the account) and tx links. |
@@ -143,6 +145,7 @@ What the tests pin down:
   - Penalties never exceed 2% of a payout or the firm's bond.
   - Penalties go 100% to the funder.
   - No path sends escrowed funds anywhere except the current firm (on a valid proof) or the funder.
+- **Receipt registry** (unit tests, plus an end-to-end test on the sandbox): an anchor can't be replaced; an issuer without keys can't anchor; rotating keys leaves older receipts verifiable; two issuers can use the same receipt id; the caller pays for the storage it adds.
 - **Sandbox scenarios:**
   - happy path
   - late payout with reroute
@@ -230,7 +233,7 @@ The components and who can call what:
 - **Refunds:** anyone can trigger one after the final deadline, or at once after a signed exclusion. Refunds and settlement still work while the contract is paused.
 
 Repo layout:
-- `contracts/`: Rust contracts and their tests, with committed wasm in `contracts/res/`
+- `contracts/`: Rust contracts (escrow, receipt registry, mock USDC) and their tests, with committed wasm in `contracts/res/`
 - `packages/shared/`: CLABE, CSV, money, borsh messages, keys, receipts, chain client, local sandbox stack
 - `apps/`: web app, router, oracle and firm simulators
 - `scripts/`: demo, deployment and keys
@@ -253,6 +256,8 @@ Demo mode: one penalty period is 10 s.
 | Router (function-call key) | [router.pg-1794403941.testnet](https://testnet.nearblocks.io/address/router.pg-1794403941.testnet) |
 | Firms | [mx1](https://testnet.nearblocks.io/address/mx1.pg-1794403941.testnet) · [mx2](https://testnet.nearblocks.io/address/mx2.pg-1794403941.testnet) · [mx3](https://testnet.nearblocks.io/address/mx3.pg-1794403941.testnet) `.pg-1794403941.testnet` |
 | DAO (Sputnik v2) | [elivo-1794414333.sputnikv2.testnet](https://testnet.nearblocks.io/address/elivo-1794414333.sputnikv2.testnet) |
+| Receipt registry | [registry.pg-1794403941.testnet](https://testnet.nearblocks.io/address/registry.pg-1794403941.testnet) |
+| Sample issuer (payouts outside the escrow) | [payroll.pg-1794403941.testnet](https://testnet.nearblocks.io/address/payroll.pg-1794403941.testnet), receipt `2026-11-contractors` anchored in [5jpN13rk…](https://testnet.nearblocks.io/txns/5jpN13rkWvJsPreDv5aFiv9WCJnp6v98tJgow8LaDxBh) |
 | Reference run | Batch 5, receipt anchored in [2qeoXKVn…](https://testnet.nearblocks.io/txns/2qeoXKVnS28WxkdEy5kaAb7CRbk5jRviq2Lq2BavWg3M) |
 
 ### Reference run, step by step
@@ -292,7 +297,6 @@ What stands between this prototype and production, what to improve next, and whe
 
 Further out:
 
-- **Receipts for payouts made on any rail.** A provider pays as it does today and issues the same signed, anchored receipt, with no escrow involved.
 - **Delivery checked against the bank's record.** In Mexico that is the CEP, the electronic payment receipt issued by Banxico for a SPEI transfer. It replaces the simulated oracle's word.
 - **Post-quantum receipts.** A second signature (ML-DSA-65, FIPS 204) beside Ed25519 in an `elivo-receipt-2` format, so a receipt kept for years can still be checked. The on-chain hash does not change. NEAR's protocol added ML-DSA-65 account keys in 2026.
 

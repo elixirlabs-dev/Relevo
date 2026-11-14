@@ -1,5 +1,5 @@
 /**
- * /rpc: forwards read-only view calls on this app's escrow to the NEAR RPC. Anything else (other
+ * /rpc: forwards read-only view calls on this app's escrow and receipt registry to the NEAR RPC. Anything else (other
  * contracts, transactions, sandbox_* state patches, other queries) is refused, so a public site is not
  * an open RPC proxy.
  */
@@ -17,8 +17,10 @@ export async function POST(req: Request): Promise<Response> {
   }
   if (body?.method !== "query" || body.params?.request_type !== "call_function")
     return Response.json({ error: "only contract view calls are allowed" }, { status: 403 });
-  if (body.params.account_id !== deployment().escrow)
-    return Response.json({ error: "only this app's escrow can be read" }, { status: 403 });
+  const d = deployment();
+  const readable = [d.escrow, ...(d.registry ? [d.registry] : [])];
+  if (!readable.includes(body.params.account_id as string))
+    return Response.json({ error: "only this app's escrow and registry can be read" }, { status: 403 });
   const r = await fetch(target, {
     method: "POST",
     headers: { "content-type": "application/json" },

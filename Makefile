@@ -11,9 +11,11 @@ NEAR_BUILD := $(CARGO) near build non-reproducible-wasm --no-abi --env "RUSTFLAG
 wasm:
 	$(NEAR_BUILD) --manifest-path contracts/mock-usdc/Cargo.toml --out-dir target/near/mock_usdc
 	$(NEAR_BUILD) --manifest-path contracts/escrow/Cargo.toml --out-dir target/near/elivo_escrow
+	$(NEAR_BUILD) --manifest-path contracts/registry/Cargo.toml --out-dir target/near/elivo_registry
 	@! strings target/near/*/*.wasm | grep -q "$(HOME)" || (echo "wasm contains local paths"; exit 1)
 	cp target/near/mock_usdc/mock_usdc.wasm $(RES)/mock_usdc.wasm
 	cp target/near/elivo_escrow/elivo_escrow.wasm $(RES)/elivo_escrow.wasm
+	cp target/near/elivo_registry/elivo_registry.wasm $(RES)/elivo_registry.wasm
 	@ls -la $(RES)/*.wasm
 
 sputnik:

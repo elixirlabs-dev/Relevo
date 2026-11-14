@@ -45,5 +45,6 @@ it("with nothing configured, serves the public testnet deployment, read-only", a
     signer: "wallet",
     routerAvailable: false,
     rpcUrl: file.rpcUrl,
+    registry: file.registry,
   });
 });

@@ -22,6 +22,7 @@ export function GET(): Response {
     routerAvailable: routerAvailable(),
     explorer: d.network === "testnet" ? "https://testnet.nearblocks.io" : null,
     rpcUrl: rpcUrl(),
+    registry: d.registry ?? null,
   };
   return Response.json(cfg);
 }

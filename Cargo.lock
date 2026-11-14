@@ -834,6 +834,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "elivo-registry"
+version = "0.1.0"
+dependencies = [
+ "near-sdk",
+]
+
+[[package]]
 name = "elliptic-curve"
 version = "0.13.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"

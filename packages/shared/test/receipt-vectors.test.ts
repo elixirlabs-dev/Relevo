@@ -46,3 +46,17 @@ describe("test vectors", () => {
     expect(totalsProblems(vector("valid.json"))).toEqual([]);
   });
 });
+
+describe("elivo-direct-receipt-1 schema", () => {
+  const direct = new Ajv2020({ allErrors: true, strict: true }).compile(
+    JSON.parse(read("docs/receipts/elivo-direct-receipt-1.schema.json")),
+  );
+  const sample = JSON.parse(read("apps/web/public/receipts/testnet-direct-payroll.json"));
+  it("accepts the testnet sample payroll receipt", () => {
+    expect(direct(sample), JSON.stringify(direct.errors)).toBe(true);
+  });
+  it("rejects a receipt without signatures, or with an extra field", () => {
+    expect(direct({ ...sample, signatures: [] })).toBe(false);
+    expect(direct({ ...sample, note: "x" })).toBe(false);
+  });
+});

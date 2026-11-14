@@ -1,0 +1,16 @@
+[package]
+name = "elivo-registry"
+description = "Elivo receipt registry: issuer keys and anchored hashes of receipts for payouts made outside the escrow (testnet prototype, unaudited)"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+rust-version.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+near-sdk = { workspace = true }
+
+[dev-dependencies]
+near-sdk = { workspace = true, features = ["unit-testing"] }

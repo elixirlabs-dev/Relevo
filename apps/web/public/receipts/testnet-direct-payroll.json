@@ -1,0 +1,70 @@
+{
+  "version": "elivo-direct-receipt-1",
+  "label": "Testnet prototype. Payout firms and SPEI receipts are simulated. Contract unaudited.",
+  "network": "testnet",
+  "registry": "registry.pg-1794403941.testnet",
+  "issuer": "payroll.pg-1794403941.testnet",
+  "receipt_id": "2026-11-contractors",
+  "generated_at": "2026-11-14T15:45:16.325Z",
+  "rail": "SPEI",
+  "currency": "MXN",
+  "payouts": [
+    {
+      "id": 0,
+      "payee_ref": "a74f5891e69d959c5b134319edd24420454b759fbc787fbafe96441859ee211f",
+      "account_last4": "7771",
+      "amount": "37000.00",
+      "status": "Paid",
+      "paid_at": "2026-11-14T15:02:11Z",
+      "reference": "SIM-SPEI-20261114-0001"
+    },
+    {
+      "id": 1,
+      "payee_ref": "fc4dafc092b2f7b59b10e7792e3cc1e66aa0c78d5631424e1fe03a48085a732d",
+      "account_last4": "9719",
+      "amount": "37000.00",
+      "status": "Paid",
+      "paid_at": "2026-11-14T15:02:40Z",
+      "reference": "SIM-SPEI-20261114-0002"
+    },
+    {
+      "id": 2,
+      "payee_ref": "09e2d60681508191fe55233aba09f0e84304b6becf229a6cabcf977872df1256",
+      "account_last4": "7899",
+      "amount": "27750.00",
+      "status": "Returned",
+      "paid_at": null,
+      "reference": "ACCOUNT_CLOSED"
+    },
+    {
+      "id": 3,
+      "payee_ref": "010e53b84018088d47fa9bea5f2c88c5f265c4b644f9f805aa06d8e348d3e2e0",
+      "account_last4": "3213",
+      "amount": "46250.00",
+      "status": "Paid",
+      "paid_at": "2026-11-14T15:03:05Z",
+      "reference": "SIM-SPEI-20261114-0004"
+    },
+    {
+      "id": 4,
+      "payee_ref": "00787215e615a4c4beb4e2cb2ebe6b810a968644371520ed4d3d7ed53a57ef10",
+      "account_last4": "5554",
+      "amount": "18500.00",
+      "status": "Paid",
+      "paid_at": "2026-11-14T15:03:31Z",
+      "reference": "SIM-SPEI-20261114-0005"
+    }
+  ],
+  "totals": {
+    "count": 5,
+    "paid": "138750.00",
+    "not_paid": "27750.00"
+  },
+  "signatures": [
+    {
+      "alg": "ed25519",
+      "public_key": "ed25519:BwdrFWX81PA4dG4KjXhf9mv1ZPm8PWS6hWFAaKC5GvvP",
+      "sig": "cXq9EFLJ1nZJM4Yh3tboNJ6Yxt5dRCJSO0bilJJJ9XL/Lxmy1lvm2fYtNWxtD6uxa2VGiE6jhvZhw6EmepXiDA=="
+    }
+  ]
+}

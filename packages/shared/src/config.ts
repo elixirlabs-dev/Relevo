@@ -13,6 +13,8 @@ export interface Deployment {
   firms: { mx1: string; mx2: string; mx3: string };
   council: string;
   dao: string;
+  /** Receipt registry for payouts made outside the escrow (elivo-direct-receipt-1). */
+  registry?: string;
 }
 
 export function loadDeployment(path: string): Deployment {

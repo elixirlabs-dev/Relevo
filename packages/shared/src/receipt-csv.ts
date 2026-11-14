@@ -3,6 +3,7 @@
  * UTC times, and the batch id and receipt hash on every row. RFC 4180 quoting, CRLF line endings, and
  * a leading ' on cells a spreadsheet would treat as a formula. Browser-safe.
  */
+import type { DirectReceipt } from "./direct-receipt.ts";
 import type { Receipt } from "./receipt.ts";
 
 export const CSV_COLUMNS = [
@@ -70,4 +71,45 @@ export function receiptToCsv(r: Receipt, receiptHash: string): string {
     return CSV_COLUMNS.map((c) => cell(row[c])).join(",");
   });
   return `${[CSV_COLUMNS.join(","), ...rows].join("\r\n")}\r\n`;
+}
+
+export const DIRECT_CSV_COLUMNS = [
+  "issuer",
+  "receipt_id",
+  "network",
+  "registry",
+  "receipt_hash",
+  "payout_id",
+  "status",
+  "amount",
+  "currency",
+  "rail",
+  "payee_ref",
+  "account_last4",
+  "paid_at",
+  "reference",
+] as const;
+
+/** A direct receipt (payouts made outside the escrow) → CSV, one row per payout, same rules as above. */
+export function directReceiptToCsv(r: DirectReceipt, receiptHash: string): string {
+  const rows = r.payouts.map((p) => {
+    const row: Record<(typeof DIRECT_CSV_COLUMNS)[number], string> = {
+      issuer: r.issuer,
+      receipt_id: r.receipt_id,
+      network: r.network,
+      registry: r.registry,
+      receipt_hash: receiptHash,
+      payout_id: String(p.id),
+      status: p.status,
+      amount: p.amount,
+      currency: r.currency,
+      rail: r.rail,
+      payee_ref: p.payee_ref,
+      account_last4: p.account_last4,
+      paid_at: p.paid_at ?? "",
+      reference: p.reference ?? "",
+    };
+    return DIRECT_CSV_COLUMNS.map((c) => cell(row[c])).join(",");
+  });
+  return `${[DIRECT_CSV_COLUMNS.join(","), ...rows].join("\r\n")}\r\n`;
 }

@@ -65,3 +65,45 @@ The CSV export (from `/verify`) has one row per payout:
 - USDC values with 6 decimals, ISO 8601 UTC times;
 - the batch id and receipt hash on every row, so a row stays traceable after import;
 - RFC 4180 quoting with CRLF line endings, and a leading `'` on any cell that starts with `=`, `+`, `-` or `@`.
+
+# Receipt format: `elivo-direct-receipt-1`
+
+A receipt for payouts an issuer (a grant programme, a payroll platform, a payout provider) **made itself, outside the escrow, on any rail**. The issuer signs it, and its hash is anchored in the receipt registry contract (`contracts/registry`) under the issuer's own account.
+
+| File | What it is |
+|---|---|
+| [`elivo-direct-receipt-1.schema.json`](elivo-direct-receipt-1.schema.json) | JSON Schema (draft 2020-12) |
+| [`apps/web/public/receipts/testnet-direct-payroll.json`](../../apps/web/public/receipts/testnet-direct-payroll.json) | A real receipt anchored on testnet, from invented payout data |
+
+What it proves, and what it doesn't: that the issuer's account published this exact list of payouts at a given time and can't change it afterwards. It does not prove that a bank carried out each transfer; that needs a bank-side source such as Mexico's CEP, which is on the roadmap.
+
+## Fields
+
+- `registry`, `issuer`, `receipt_id`: where the hash is anchored, by whom, and under which id (1–64 of `A-Z a-z 0-9 . _ -`). An issuer can't reuse an id.
+- `rail` and `currency`: for example `SPEI` and `MXN`. On the SPEI rail every account is checked as a CLABE before the receipt is built.
+- Each payout: `payee_ref` = `sha256(salt ‖ account)` in hex (the salt stays with the issuer), `account_last4`, `amount` (two decimal places), `status` (`Paid`, `Returned` or `Failed`), `paid_at` (ISO 8601 UTC) and `reference` (the rail's own reference, or why the payout wasn't made).
+- `totals`: `count`, `paid` (sum of `Paid` amounts) and `not_paid` (the rest), recomputable from the rows.
+- `signatures`: a list. Today it holds one ed25519 signature. An issuer that publishes an ML-DSA-65 key adds a second, post-quantum signature over the same bytes.
+
+## Signing and the anchored hash
+
+1. **Signed bytes:** the RFC 8785 canonical JSON of the receipt without its `signatures` field.
+2. **Anchored hash:** `base58(sha256(canonical JSON of the whole receipt, signatures included))`, written with the registry's `anchor(receipt_id, receipt_hash)`.
+3. **Keys:** the issuer publishes them with `set_keys`. Keys are versioned, and each anchor records the version in force, so rotating a key never changes how an older receipt verifies.
+
+## How to verify
+
+1. Choose the registry account yourself, and call `get_receipt({"issuer": <issuer>, "receipt_id": <receipt_id>})`.
+2. Check that the ed25519 signature is by the returned `receipt_pk`.
+3. Check that the hash of the file equals the returned `receipt_hash`.
+4. Recompute the totals.
+
+`/verify` in the web app runs all four. On the command line: `pnpm verify-receipt <file> --chain --rpc <url> --registry <account>`.
+
+## Issuing one
+
+```bash
+pnpm issue-receipt samples/payroll-results.csv --id <receipt-id> --issuer <your-testnet-account>
+```
+
+The results CSV has the columns `name,account,amount,status,paid_at,reference`. Names and full account numbers never leave your machine. The command publishes your receipt key if needed, signs, anchors, and writes the receipt and its salt to `.data/receipts/`.

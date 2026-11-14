@@ -61,6 +61,8 @@ export async function startLocalStack(
       mx3: "5",
       council: "20",
       dao: "30",
+      registry: "5",
+      payroll: "5",
     };
     for (const [prefix, near] of Object.entries(funding)) {
       const k = freshKey();
@@ -94,6 +96,7 @@ export async function startLocalStack(
       firms: { mx1: id("mx1"), mx2: id("mx2"), mx3: id("mx3") },
       council: id("council"),
       dao: id("dao"),
+      registry: id("registry"),
     };
 
     const deploy = async (prefix: string, wasmPath: string, args: object) => {
@@ -115,6 +118,7 @@ export async function startLocalStack(
       receipt_pk: keys.receipt.publicKeyStr,
       demo_mode: true,
     });
+    await deploy("registry", repo("contracts/res/elivo_registry.wasm"), {});
     await deploy("dao", repo(".cache/sputnikdao2.wasm"), {
       config: { name: "elivo-demo", purpose: "Elivo Payout Guard demo (sandbox)", metadata: "" },
       policy: [d.council],

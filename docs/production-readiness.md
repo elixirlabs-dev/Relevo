@@ -132,7 +132,7 @@ These are assumptions until they are tested in conversations with those buyers.
 
 The product is a ladder. Each level needs less trust than the one before:
 
-1. **Receipt only.** A provider pays as it does today; each batch gets a signed receipt anchored on-chain. Built here: the receipt format, `/verify`, the CSV and the delivery report. Not built: issuing receipts for payouts that didn't go through the escrow.
+1. **Receipt only.** A provider pays as it does today; each batch gets a signed receipt anchored on-chain. Built here: the receipt format, `/verify`, the CSV, the delivery report, and receipts for payouts that didn't go through the escrow (the receipt registry contract and `pnpm issue-receipt`, on testnet).
 2. **Receipt with independent proof.** Delivery is checked against the bank's own record (in Mexico, the CEP), not the provider's word. Not built: the oracle is simulated.
 3. **Escrow and bonds.** Funds are locked, a late firm is rerouted and its bond pays a penalty. Built here, on testnet, with simulated firms.
 
@@ -146,7 +146,7 @@ Directions the design already points to, roughly in order:
 - **Sealed-bid quotes and a firm marketplace.** Firms compete on signed, commit-reveal quotes. The on-chain scoreboard (on-time rate, penalties, volume) becomes a reputation that sets bond requirements and routing priority.
 - **More payout corridors.** The escrow, bond and penalty pattern doesn't depend on SPEI. Other instant-payment rails could plug in through the same firm and proof interfaces, each with its own proof source.
 - **Recurring and streaming payroll.** DAO contributors are often paid monthly, so one vote could approve a schedule rather than a single batch.
-- **Funders that are not DAOs.** A company wallet or multisig funds a batch directly, and a provider can issue a receipt for payouts made outside the escrow (level 1 of the ladder).
+- **Funders that are not DAOs.** A company wallet or multisig funds a batch directly. (Issuing a receipt for payouts made outside the escrow, level 1 of the ladder, is now built.)
 - **DAO-native operations.** The DAO would own the escrow configuration and firm approvals through proposals, and other DAO frameworks would be supported beyond Sputnik.
 - **Receipts as accounting records.** First step built: `/verify` checks a receipt against the chain in the browser and exports it as CSV. Next: exports in the formats accounting systems import directly, and a hosted auditor view.
 - **An open delivery-proof standard.** A shared format for "this fiat payment was delivered", so other projects can reuse the same verification, bonding and penalty mechanics for the fiat last mile.

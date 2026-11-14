@@ -18,4 +18,5 @@ export const TESTNET_DEPLOYMENT = {
   created_at: "2026-11-11T13:36:45Z",
   dao: "elivo-1794414333.sputnikv2.testnet",
   rpcUrl: "https://test.rpc.fastnear.com",
+  registry: "registry.pg-1794403941.testnet",
 } as const;

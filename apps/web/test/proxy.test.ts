@@ -79,6 +79,16 @@ describe("/rpc handler", () => {
     expect((f.mock.calls[0] as unknown[])[0]).toBe("http://127.0.0.1:3030");
   });
 
+  it("also reads the receipt registry when the deployment has one", async () => {
+    process.env.ELIVO_DEPLOYMENT_JSON = JSON.stringify({ ...TESTNET, registry: "registry.example.testnet" });
+    process.env.NEAR_RPC_URL = "http://127.0.0.1:3030";
+    const f = vi.fn(async () => Response.json({ result: { result: [] } }));
+    vi.stubGlobal("fetch", f);
+    const { POST } = await import("../app/rpc/route.ts");
+    expect((await POST(req(view("registry.example.testnet")))).status).toBe(200);
+    expect((await POST(req(view("usdc.tether-token.near")))).status).toBe(403);
+  });
+
   it("refuses anything else without contacting the RPC", async () => {
     process.env.NEAR_RPC_URL = "http://127.0.0.1:3030";
     const f = vi.fn();

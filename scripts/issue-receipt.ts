@@ -1,0 +1,109 @@
+/**
+ * pnpm issue-receipt <results.csv> --id <receipt id> --issuer <account> [--rail SPEI] [--currency MXN]
+ *
+ * Issues an elivo-direct-receipt-1 for payouts the issuer already made outside the escrow, on testnet:
+ * builds the receipt from the results CSV, signs it with the issuer's receipt key, publishes that key
+ * in the receipt registry if needed, and anchors the receipt's hash there.
+ *
+ * - The issuer account signs with its key in ~/.near-credentials/testnet/<issuer>.json.
+ * - The receipt key is .data/keys/receipt-<issuer>.json (created on first use).
+ * - The receipt and its payee salt are written to .data/receipts/. Keep the salt with your records.
+ *
+ * Testnet prototype. Payout firms and SPEI receipts are simulated. Contract unaudited.
+ */
+import { randomBytes } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { Chain } from "../packages/shared/src/chain.ts";
+import { env, loadDeployment } from "../packages/shared/src/config.ts";
+import {
+  anchorDirectReceipt,
+  buildDirectReceipt,
+  ensureIssuerKeys,
+  parseResultsCsv,
+  signDirectReceipt,
+} from "../packages/shared/src/direct-issue.ts";
+import { keyFromSeed, loadKeyFile } from "../packages/shared/src/keys.ts";
+import { LABEL } from "../packages/shared/src/label.ts";
+
+function arg(name: string, fallback?: string): string {
+  const i = process.argv.indexOf(name);
+  const v = i >= 0 ? process.argv[i + 1] : fallback;
+  if (!v) {
+    console.error(
+      "usage: pnpm issue-receipt <results.csv> --id <receipt id> --issuer <account> [--rail SPEI] [--currency MXN]",
+    );
+    process.exit(2);
+  }
+  return v;
+}
+
+async function main() {
+  console.log(LABEL);
+  const file = process.argv[2];
+  if (!file || file.startsWith("--")) arg("--missing-file");
+  const id = arg("--id");
+  const issuerId = arg("--issuer");
+  const rail = arg("--rail", "SPEI");
+  const currency = arg("--currency", "MXN");
+
+  const d = loadDeployment("deployments/testnet.json");
+  if (!d.registry)
+    throw new Error("deployments/testnet.json has no registry: run ./scripts/deploy-registry.sh");
+  const chain = new Chain({
+    rpcUrl: d.rpcUrl,
+    network: "testnet",
+    fallbackRpcUrls: env({ ELIVO_NETWORK: "testnet" }).rpcFallbacks,
+  });
+
+  const { rows, errors } = parseResultsCsv(readFileSync(file, "utf8"), { rail });
+  if (errors.length) {
+    for (const e of errors) console.error(`row ${e.row}: ${e.reason}`);
+    process.exit(1);
+  }
+
+  const keyFile = join(".data", "keys", `receipt-${issuerId}.json`);
+  if (!existsSync(keyFile)) {
+    mkdirSync(join(".data", "keys"), { recursive: true });
+    const k = keyFromSeed(randomBytes(32));
+    writeFileSync(keyFile, JSON.stringify({ public_key: k.publicKeyStr, secret_key: k.secretKeyStr }), {
+      mode: 0o600,
+    });
+  }
+  const receiptKey = loadKeyFile(keyFile);
+  const issuer = chain.signer(
+    issuerId,
+    loadKeyFile(join(homedir(), ".near-credentials", "testnet", `${issuerId}.json`)),
+  );
+
+  const version = await ensureIssuerKeys(chain.view.bind(chain), issuer, d.registry, receiptKey);
+  const salt = randomBytes(16);
+  const receipt = signDirectReceipt(
+    buildDirectReceipt(rows, {
+      network: "testnet",
+      registry: d.registry,
+      issuer: issuerId,
+      receipt_id: id,
+      rail,
+      currency,
+      salt,
+    }),
+    receiptKey,
+  );
+  const { txHash, hash } = await anchorDirectReceipt(issuer, d.registry, receipt);
+
+  mkdirSync(join(".data", "receipts"), { recursive: true });
+  const out = join(".data", "receipts", `direct-${issuerId}-${id}.json`);
+  writeFileSync(out, `${JSON.stringify(receipt, null, 2)}\n`);
+  writeFileSync(join(".data", "receipts", `direct-${issuerId}-${id}.salt`), `${salt.toString("hex")}\n`);
+  console.log(`Receipt key version ${version}: ${receiptKey.publicKeyStr}`);
+  console.log(`Anchored ${hash}: ${chain.explorerTx(txHash)}`);
+  console.log(`Wrote ${out}`);
+  console.log(`Verify: pnpm verify-receipt ${out} --chain --rpc ${d.rpcUrl} --registry ${d.registry}`);
+}
+
+main().catch((e) => {
+  console.error(`FAIL: ${(e as Error).message}`);
+  process.exit(1);
+});
