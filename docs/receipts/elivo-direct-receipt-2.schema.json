@@ -1,0 +1,238 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/elixirlabs-dev/Relevo/blob/main/docs/receipts/elivo-direct-receipt-2.schema.json",
+  "title": "Elivo direct payout receipt, version elivo-direct-receipt-2",
+  "description": "Testnet prototype. Payout firms and SPEI receipts are simulated. Contract unaudited. A signed record of payouts an issuer made itself, outside the escrow, on any rail. The signatures cover the header (every field except payouts and signatures), which commits to the payouts through payouts_root; the anchored hash covers the receipt without payouts, so each payee can verify their own row with an elivo-payee-proof-1. Amounts are decimal strings with two places in the receipt's currency.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "label",
+    "network",
+    "registry",
+    "issuer",
+    "receipt_id",
+    "generated_at",
+    "rail",
+    "currency",
+    "totals",
+    "payouts_root",
+    "payout_count",
+    "check_ref",
+    "signatures",
+    "payouts"
+  ],
+  "properties": {
+    "version": {
+      "const": "elivo-direct-receipt-2"
+    },
+    "label": {
+      "type": "string",
+      "minLength": 1
+    },
+    "network": {
+      "enum": [
+        "sandbox",
+        "testnet",
+        "mainnet"
+      ]
+    },
+    "registry": {
+      "$ref": "#/$defs/account"
+    },
+    "issuer": {
+      "$ref": "#/$defs/account"
+    },
+    "receipt_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._-]{1,64}$"
+    },
+    "generated_at": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}(:[0-9]{2}(\\.[0-9]+)?)?Z$"
+    },
+    "rail": {
+      "type": "string",
+      "pattern": "^[A-Z0-9_-]{2,16}$"
+    },
+    "currency": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$"
+    },
+    "totals": {
+      "$ref": "#/$defs/totals"
+    },
+    "payouts_root": {
+      "$ref": "#/$defs/hex32",
+      "description": "Merkle root over the payouts in order: leaf = sha256(0x00 ‖ canonical JSON of the payout), node = sha256(0x01 ‖ left ‖ right), an odd node carried up unchanged."
+    },
+    "payout_count": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "check_ref": {
+      "$ref": "#/$defs/check_ref"
+    },
+    "signatures": {
+      "$ref": "#/$defs/signatures"
+    },
+    "payouts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/payout"
+      }
+    }
+  },
+  "$defs": {
+    "account": {
+      "type": "string",
+      "pattern": "^[a-z0-9._-]{2,64}$"
+    },
+    "amount": {
+      "type": "string",
+      "pattern": "^\\d{1,15}\\.\\d{2}$"
+    },
+    "hex32": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "payout": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "payee_ref",
+        "account_last4",
+        "amount",
+        "status",
+        "paid_at",
+        "reference"
+      ],
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "payee_ref": {
+          "$ref": "#/$defs/hex32"
+        },
+        "account_last4": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9]{4}$"
+        },
+        "amount": {
+          "$ref": "#/$defs/amount"
+        },
+        "status": {
+          "enum": [
+            "Paid",
+            "Returned",
+            "Failed"
+          ]
+        },
+        "paid_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}(:[0-9]{2}(\\.[0-9]+)?)?Z$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reference": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 64
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "totals": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "count",
+        "paid",
+        "not_paid"
+      ],
+      "properties": {
+        "count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "paid": {
+          "$ref": "#/$defs/amount"
+        },
+        "not_paid": {
+          "$ref": "#/$defs/amount"
+        }
+      }
+    },
+    "signatures": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "alg",
+          "public_key",
+          "sig"
+        ],
+        "properties": {
+          "alg": {
+            "enum": [
+              "ed25519",
+              "ml-dsa-65"
+            ]
+          },
+          "public_key": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sig": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "check_ref": {
+      "description": "The pre-payout check report this receipt refers to, or null.",
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "report_id",
+            "report_hash"
+          ],
+          "properties": {
+            "report_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "report_hash": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        }
+      ]
+    }
+  }
+}

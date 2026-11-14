@@ -1,11 +1,26 @@
 /**
  * verify-receipt <file> --pubkey <ed25519:...>
  * verify-receipt <file> --chain --rpc <url> --escrow <account>      (a batch receipt, elivo-receipt-1)
- * verify-receipt <file> --chain --rpc <url> --registry <account>    (a direct receipt, elivo-direct-receipt-1)
+ * verify-receipt <file> --chain --rpc <url> --registry <account>    (a direct receipt, elivo-direct-receipt-1 or -2)
+ * verify-receipt <file> --chain --rpc <url> --registry <account> [--account <CLABE>]   (a payee proof, elivo-payee-proof-1)
  * Prints OK (exit 0) or FAIL: <reason> (exit 1). A key embedded in the file is never trusted alone.
  */
 import { readFileSync } from "node:fs";
 import { type DirectReceipt, directTotalsProblems, isDirectReceipt } from "../direct-receipt.ts";
+import {
+  DIRECT_V2,
+  type DirectReceiptV2,
+  directV2HashB58Web,
+  isDirectReceiptV2,
+  isPayeeProof,
+  PAYEE_PROOF,
+  type PayeeProof,
+  payeeRefMatches,
+  type SignedHeaderV2,
+  verifyDirectV2SignaturesWeb,
+  verifyDirectV2Structure,
+  verifyPayeeProofStructure,
+} from "../direct-receipt-v2.ts";
 import { directHashB58Web, type IssuerKeys, verifyDirectSignaturesWeb } from "../direct-verify-web.ts";
 import { type Receipt, receiptHashB58, verifyReceipt } from "../receipt.ts";
 
@@ -34,6 +49,8 @@ async function main() {
     fail("unreadable");
   }
   if (isDirectReceipt(receipt)) return verifyDirect(receipt);
+  if (isDirectReceiptV2(receipt)) return verifyDirectV2(receipt);
+  if (isPayeeProof(receipt)) return verifyPayeeProof(receipt);
   let expected = arg("--pubkey");
   let anchored: string | null | undefined;
   if (process.argv.includes("--chain")) {
@@ -64,7 +81,13 @@ async function main() {
   console.log("OK");
 }
 
-async function verifyDirect(r: DirectReceipt) {
+/** Expected keys and anchored hash: from the registry with --chain, or a bare ed25519 key with --pubkey. */
+async function directKeys(r: {
+  registry: string;
+  issuer: string;
+  receipt_id: string;
+  signatures: DirectReceipt["signatures"];
+}): Promise<{ keys: IssuerKeys; anchored?: string }> {
   const rpc = arg("--rpc");
   const registry = arg("--registry");
   const pubkey = arg("--pubkey");
@@ -89,11 +112,43 @@ async function verifyDirect(r: DirectReceipt) {
     keys = { receipt_pk: pubkey };
   }
   if (!keys) fail("no expected public key (use --pubkey or --chain)");
+  return { keys, anchored };
+}
+
+async function verifyDirect(r: DirectReceipt) {
+  const { keys, anchored } = await directKeys(r);
   const v = await verifyDirectSignaturesWeb(r, keys);
   if (!v.ok) fail(v.reason);
   if (anchored !== undefined && anchored !== (await directHashB58Web(r))) fail("hash_mismatch");
   if (directTotalsProblems(r).length) fail("totals_mismatch");
   console.log("OK");
+}
+
+/** Signatures over the v2 header, then the anchored hash (header + signatures, without payouts). */
+async function verifySignedHeaderV2(h: SignedHeaderV2) {
+  const { keys, anchored } = await directKeys(h);
+  const v = await verifyDirectV2SignaturesWeb(h, keys);
+  if (!v.ok) fail(v.reason);
+  if (anchored !== undefined && anchored !== (await directV2HashB58Web(h))) fail("hash_mismatch");
+}
+
+async function verifyDirectV2(r: DirectReceiptV2) {
+  await verifySignedHeaderV2(r);
+  const problems = verifyDirectV2Structure(r);
+  if (problems.length) fail(problems[0]);
+  console.log(`OK (${DIRECT_V2}, ${r.payout_count} payouts)`);
+}
+
+async function verifyPayeeProof(p: PayeeProof) {
+  await verifySignedHeaderV2(p.header);
+  const problems = verifyPayeeProofStructure(p);
+  if (problems.length) fail(problems[0]);
+  const account = arg("--account");
+  if (account !== undefined && !payeeRefMatches(p, account)) fail("payee_ref_mismatch");
+  const h = p.header;
+  console.log(
+    `OK (${PAYEE_PROOF}, payout ${p.proof.index} of ${h.payout_count} in ${h.issuer}/${h.receipt_id})`,
+  );
 }
 
 main().catch((e) => fail(`error: ${(e as Error).message}`));
