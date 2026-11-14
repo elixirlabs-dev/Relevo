@@ -23,6 +23,7 @@
 | Attestations: an auditor or DAO member who verified a receipt vouches for it with their NEAR account; DAO members are labelled with their role | the payroll receipt v2 on [/verify](https://relevo-amber.vercel.app/verify) |
 | Mirrored on Ethereum with NEAR Chain Signatures: the issuer's NEAR account signs the Ethereum transaction through NEAR's MPC network. The Sepolia transaction carries the anchored hash; your browser checks the sender is the address the MPC network derives for the issuer | `pnpm mirror-receipt --issuer <account> --id <receipt id>`; the check shows on [/verify](https://relevo-amber.vercel.app/verify) |
 | Fund from any chain with NEAR Intents (mainnet, real 1Click deposit) | [/fund](https://relevo-amber.vercel.app/fund) |
+| A real mainnet transfer: 1.60 USDC sent from NEAR Intents to the project account `elivo.near`, checkable on-chain | [Real mainnet run](#real-mainnet-run) |
 | Two Rust contracts (escrow, receipt registry), property-tested invariants, end-to-end tests on a local NEAR sandbox | [Run the tests](#run-the-tests) |
 
 A DAO votes once to pay a batch of contributors in Mexico. The USDC locks in a NEAR escrow, and bonded payout firms deliver. A late firm is rerouted automatically and its bond pays a penalty to the DAO. Every payout ends in a signed receipt, whose hash is anchored on-chain.
@@ -61,6 +62,18 @@ Each firm's bond and on-chain record is at https://relevo-amber.vercel.app/firms
 ### Fund from any chain (mainnet, real money)
 
 This one is not part of the testnet demo: it moves real USDC. Open https://relevo-amber.vercel.app/fund, choose Base or Arbitrum, enter an amount (1 to 100 USDC), the NEAR mainnet account that should receive the USDC, and a refund address you control on the origin chain. "Get a price" asks NEAR Intents 1Click for a price and reserves nothing. "Get a deposit address" asks for a real quote, checks that it is for exactly your amount, account and refund address, and shows a one-time deposit address, the exact amount, the refund address and a deadline. Send exactly that amount of USDC on that chain from your own wallet before the deadline; the page polls 1Click every 5 seconds and shows each step until the USDC is delivered on NEAR, with links to the transactions. If a deposit made before the deadline is not swapped, 1Click refunds it to your refund address. After the deadline the address is inactive: the page hides it, and anything sent to it, or sent in another token or on another chain, may be lost. The page never holds keys or sends funds, and a reload resumes where it was.
+
+### Real mainnet run
+
+On 14 November 2026, 1.60 USDC was sent from a NEAR Intents balance (near.com, Universal Send) to `elivo.near`, the project's NEAR mainnet account. This was a send from an existing Intents balance, not a `/fund` deposit; both end as native NEAR USDC. The demo video shows the send completing and the USDC arriving in the wallet.
+
+Anyone can check it. The command asks an archival node for the balance at mainnet block 224,571,327:
+
+```bash
+curl -s https://archival-rpc.mainnet.near.org -H 'content-type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"query","params":{"request_type":"call_function","block_id":224571327,"account_id":"17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1","method_name":"ft_balance_of","args_base64":"eyJhY2NvdW50X2lkIjoiZWxpdm8ubmVhciJ9"}}'
+```
+
+`args_base64` is `{"account_id":"elivo.near"}`. The result decodes to `"1600000"`, which is 1.60 USDC (6 decimals).
 
 ## What is real and what is simulated
 
@@ -287,6 +300,8 @@ Demo mode: one penalty period is 10 s.
 | Receipt registry | [registry.pg-1794403941.testnet](https://testnet.nearblocks.io/address/registry.pg-1794403941.testnet) |
 | Sample issuer (payouts outside the escrow) | [payroll.pg-1794403941.testnet](https://testnet.nearblocks.io/address/payroll.pg-1794403941.testnet), receipt `2026-11-contractors` (ed25519, key version 1) anchored in [5jpN13rk…](https://testnet.nearblocks.io/txns/5jpN13rkWvJsPreDv5aFiv9WCJnp6v98tJgow8LaDxBh); receipt `2026-11-contractors-pq` (ed25519 + ML-DSA-65, key version 2) anchored in [Fg5PANuD…](https://testnet.nearblocks.io/txns/Fg5PANuDvpADDG5GsJHydD3Tm68YV7rHd5DU4GEcjaRj) |
 | Reference run | Batch 5, receipt anchored in [2qeoXKVn…](https://testnet.nearblocks.io/txns/2qeoXKVnS28WxkdEy5kaAb7CRbk5jRviq2Lq2BavWg3M) |
+| Council attestation | The sample DAO's council attests receipt `payroll-2026-11-v2` in [E2cUXKva…](https://testnet.nearblocks.io/txns/E2cUXKvaUhxYFh8TfzpCerdURRytGabRrW6tz5Xnj3ZT) |
+| Ethereum mirror (Chain Signatures) | `v1.signer-prod.testnet` signs in [A935djV8…](https://testnet.nearblocks.io/txns/A935djV8gqUKQ6oCNafHiD8MX6gFjb87GffCramRxdZJ); Sepolia transaction [0x310ff25b…](https://sepolia.etherscan.io/tx/0x310ff25bcd4ee30a92f7450b67e3f76f7ebcd6a0b73f3f03285b74fcf94beb92) from the derived address `0xd58bd0be27a98d505c73bb4e24722cacf4342f8e` |
 
 ### Reference run, step by step
 
@@ -337,7 +352,7 @@ What stands between this prototype and production, what to improve next, and whe
 - Real payout-firm adapters in place of the simulators, and a bank-side proof source in place of the simulated oracle.
 - A custodian-held second release key.
 - Sealed commit-reveal quotes; the full set of exclusion reason codes (bank outage, rejection, wrong details).
-- Pay-in through 1Click for real (today the app shows a dry quote only).
+- Pay-in through 1Click inside the batch flow. Today `/fund` makes real mainnet deposits on its own page, and the testnet Quote step shows a dry quote.
 - More wallets in the web app: HOT, Ledger and MPC wallets (Meteor, Intear and Sender today). MyNearWallet was dropped: it was retired in November 2026.
 - An audit before any real funds.
 
