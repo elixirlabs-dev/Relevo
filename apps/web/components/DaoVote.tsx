@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { WebConfig } from "../lib/config.ts";
 import { type DaoProposal, fetchDaoProposal } from "../lib/dao.ts";
-import { demoSigner, type Signer, walletSigner } from "../lib/signer.ts";
+import { demoSigner, type Signer, type WalletPort, walletSigner } from "../lib/signer.ts";
 import { ProposeView } from "./ProposeView.tsx";
 import { Button } from "./ui.tsx";
 
@@ -29,6 +29,8 @@ export function DaoVote({
   const [tick, setTick] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [walletError, setWalletError] = useState<string | null>(null);
+  /** Kept so a sign-in that completes without a page reload (popup or extension wallets) can be picked up. */
+  const port = useRef<WalletPort | null>(null);
   const [unknownDraft, setUnknownDraft] = useState(false);
   const [stalled, setStalled] = useState(false);
   /** When this page first saw the proposal Approved (the escrow should record the batch soon after). */
@@ -42,7 +44,8 @@ export function DaoVote({
     import("../lib/wallet.ts")
       .then(async ({ walletPort, WALLETS }) => {
         setWallets(WALLETS);
-        setSigner(walletSigner(await walletPort(), cfg));
+        port.current = await walletPort();
+        setSigner(walletSigner(port.current, cfg));
       })
       .catch((e) => setError(`wallet: ${(e as Error).message}`));
   }, [cfg]);
@@ -98,6 +101,9 @@ export function DaoVote({
                   setWalletError(null);
                   signer
                     .signIn(w.id)
+                    .then(() => {
+                      if (port.current) setSigner(walletSigner(port.current, cfg));
+                    })
                     .catch((e) =>
                       setWalletError(`${w.name}: ${(e as Error).message || "could not connect"}`),
                     );

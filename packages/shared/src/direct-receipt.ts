@@ -89,19 +89,55 @@ export function directTotalsProblems(r: DirectReceiptBody): string[] {
   return (Object.keys(want) as Array<keyof DirectTotals>).filter((k) => r.totals?.[k] !== want[k]);
 }
 
+const STATUSES = new Set(["Paid", "Returned", "Failed"]);
+const strOrNull = (v: unknown) => v === null || typeof v === "string";
+
+function isPayout(p: unknown): p is DirectPayout {
+  const x = p as DirectPayout | null;
+  return (
+    !!x &&
+    typeof x === "object" &&
+    Number.isInteger(x.id) &&
+    typeof x.payee_ref === "string" &&
+    typeof x.account_last4 === "string" &&
+    typeof x.amount === "string" &&
+    AMOUNT_2DP.test(x.amount) &&
+    STATUSES.has(x.status) &&
+    strOrNull(x.paid_at) &&
+    strOrNull(x.reference)
+  );
+}
+
+const isSignature = (s: unknown) => {
+  const x = s as DirectSignature | null;
+  return (
+    !!x &&
+    typeof x === "object" &&
+    typeof x.alg === "string" &&
+    typeof x.public_key === "string" &&
+    typeof x.sig === "string"
+  );
+};
+
+/** Shape check: every field a verifier or the report reads has the type it expects. */
 export function isDirectReceipt(v: unknown): v is DirectReceipt {
   const r = v as DirectReceipt | null;
   return (
     !!r &&
     typeof r === "object" &&
     r.version === DIRECT_VERSION &&
+    typeof r.network === "string" &&
     typeof r.registry === "string" &&
     typeof r.issuer === "string" &&
     typeof r.receipt_id === "string" &&
     RECEIPT_ID.test(r.receipt_id) &&
+    typeof r.rail === "string" &&
+    typeof r.currency === "string" &&
     Array.isArray(r.payouts) &&
+    r.payouts.every(isPayout) &&
     !!r.totals &&
     typeof r.totals === "object" &&
-    Array.isArray(r.signatures)
+    Array.isArray(r.signatures) &&
+    r.signatures.every(isSignature)
   );
 }

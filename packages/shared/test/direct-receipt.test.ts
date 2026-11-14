@@ -91,6 +91,19 @@ describe("direct receipt", () => {
     expect(isDirectReceipt({ version: "elivo-receipt-1" })).toBe(false);
   });
 
+  it("rejects payout rows with the wrong types, so a signed but malformed receipt can't break the page", () => {
+    const bad = (f: (r: ReturnType<typeof receipt>) => void) => {
+      const r = structuredClone(receipt()) as ReturnType<typeof receipt>;
+      f(r);
+      return isDirectReceipt(r);
+    };
+    expect(bad((r) => Object.assign(r.payouts[0], { reference: 5 }))).toBe(false);
+    expect(bad((r) => Object.assign(r.payouts[0], { status: "Maybe" }))).toBe(false);
+    expect(bad((r) => Object.assign(r.payouts[0], { amount: "12" }))).toBe(false);
+    expect(bad((r) => Object.assign(r.payouts[0], { paid_at: 0 }))).toBe(false);
+    expect(bad((r) => Object.assign(r.signatures, [null]))).toBe(false);
+  });
+
   it("verifies with the issuer's key and fails when edited or checked with another key", async () => {
     const r = receipt();
     expect(await verifyDirectSignaturesWeb(r, { receipt_pk: key.publicKeyStr })).toEqual({ ok: true });

@@ -73,6 +73,7 @@ async function verifyDirect(r: DirectReceipt) {
   if (process.argv.includes("--chain")) {
     if (!registry) fail("--chain needs --registry (the file's registry is not trusted)");
     if (!rpc) fail("missing --rpc");
+    if (r.registry !== registry) fail(`wrong_registry: the receipt is for ${r.registry}, not ${registry}`);
     const { Chain } = await import("../chain.ts");
     const chain = new Chain({ rpcUrl: rpc, network: "testnet" });
     const a = await chain.view<(IssuerKeys & { receipt_hash: string }) | null>(registry, "get_receipt", {
@@ -82,7 +83,11 @@ async function verifyDirect(r: DirectReceipt) {
     if (!a) fail("not_anchored");
     keys = a;
     anchored = a.receipt_hash;
-  } else if (pubkey) keys = { receipt_pk: pubkey };
+  } else if (pubkey) {
+    if (r.signatures.some((x) => x.alg === "ml-dsa-65"))
+      fail("post-quantum receipt: use --chain, so the ML-DSA-65 key comes from the registry");
+    keys = { receipt_pk: pubkey };
+  }
   if (!keys) fail("no expected public key (use --pubkey or --chain)");
   const v = await verifyDirectSignaturesWeb(r, keys);
   if (!v.ok) fail(v.reason);
