@@ -109,3 +109,86 @@ pnpm issue-receipt samples/payroll-results.csv --id <receipt-id> --issuer <your-
 ```
 
 Add `--pq` to sign with ML-DSA-65 as well; the command creates the post-quantum key on first use and publishes it with your ed25519 key. The results CSV has the columns `name,account,amount,status,paid_at,reference`. Names and full account numbers never leave your machine. The command publishes your receipt key if needed, signs, anchors, and writes the receipt and its salt to `.data/receipts/`.
+
+# Receipt format: `elivo-direct-receipt-2` and payee proofs (`elivo-payee-proof-1`)
+
+> **Testnet prototype. Payout firms and SPEI receipts are simulated. Contract unaudited.**
+
+Version 2 of the direct receipt lets each payee check **their own payout** against the registry without seeing anyone else's. The issuer signs and anchors a header that commits to all payouts through a Merkle root. Each payee gets a small proof file containing the signed header, their payout row, the Merkle path from that row to the root, and their own salt.
+
+| File | What it is |
+|---|---|
+| [`elivo-direct-receipt-2.schema.json`](elivo-direct-receipt-2.schema.json) | JSON Schema (draft 2020-12) for the full receipt |
+| [`elivo-payee-proof-1.schema.json`](elivo-payee-proof-1.schema.json) | JSON Schema (draft 2020-12) for one payee's proof |
+
+Version 1 receipts are unchanged and keep verifying as before.
+
+## Header and payouts
+
+The receipt is a **header** plus `signatures` plus `payouts`. The header holds every `elivo-direct-receipt-1` field except `payouts` (`label`, `network`, `registry`, `issuer`, `receipt_id`, `generated_at`, `rail`, `currency`, `totals`), with `version: "elivo-direct-receipt-2"` and three new fields:
+- `payouts_root`: the Merkle root over the payouts, in hex;
+- `payout_count`: the number of payouts;
+- `check_ref`: `{ "report_id", "report_hash" }` of the pre-payout check report, or `null`.
+
+Payout rows have the same fields as in v1. A payout's `id` is its position (0, 1, 2, ...).
+
+## Merkle tree
+
+- **Leaf:** `sha256(0x00 ‖ RFC 8785 canonical JSON of the payout row)`.
+- **Internal node:** `sha256(0x01 ‖ left ‖ right)`. The prefixes stop a leaf from passing as a node.
+- **Odd node:** at any level, a last node without a partner is carried up unchanged (it is not duplicated).
+- **One payout:** the root is that payout's leaf.
+- **Proof:** `siblings` lists the sibling hashes from the leaf up. `side: "L"` means the current hash becomes `sha256(0x01 ‖ sibling ‖ current)`, and `side: "R"` means `sha256(0x01 ‖ current ‖ sibling)`. A level where the node was carried up has no entry.
+
+## Payee references
+
+Each payee gets their own salt, derived from a per-receipt salt that only the issuer keeps:
+- `payee_salt_i = sha256(receipt_salt ‖ uint32be(i))`;
+- `payee_ref_i = hex(sha256(payee_salt_i ‖ utf8(account)))`.
+
+A payee proof reveals `payee_salt_i` and nothing else. The other payees' salts can't be derived from it, so a proof doesn't help anyone link the other rows to accounts.
+
+## Signing and the anchored hash
+
+1. **Signed bytes:** the RFC 8785 canonical JSON of the header, with no `payouts` and no `signatures`.
+2. **Signatures:** the same as v1. One ed25519 signature, plus ML-DSA-65 with the FIPS 204 context string `elivo-direct-receipt-1` when the issuer has published an ML-DSA-65 key.
+3. **Anchored hash:** `base58(sha256(canonical JSON of the header plus signatures))`, which is the receipt without `payouts`. It is written with the registry's `anchor(receipt_id, receipt_hash)`, exactly as in v1.
+
+Because neither the signatures nor the anchor cover the rows directly, the header alone (inside a payee proof) can be checked against the chain. The rows are bound through `payouts_root`.
+
+## How to verify a v2 receipt
+
+1. Choose the registry account yourself, and call `get_receipt({"issuer": <issuer>, "receipt_id": <receipt_id>})`.
+2. Check the signatures over the signed bytes against the returned `receipt_pk`, and against `mldsa65_pk` when it is set. These are the same rules as v1.
+3. Check that the anchored hash computed from the file equals the returned `receipt_hash`.
+4. Recompute `payouts_root` from the rows, check that `payout_count` equals the number of rows and that the ids run 0..n−1, and recompute the totals.
+
+## How to verify a payee proof
+
+1. Do steps 1 to 3 above, using the proof's `header`.
+2. Recompute the leaf from `payout` and follow `proof.siblings` up to `header.payouts_root`. Check that `payout.id` equals `proof.index`, that the index is below `payout_count`, and that the sides fit that index in a tree of `payout_count` leaves.
+3. **Payee only:** check that `sha256(payee_salt ‖ utf8(your account))` equals `payout.payee_ref` and that `account_last4` matches.
+
+On the command line, either file works. The output names the format:
+
+```bash
+pnpm verify-receipt <receipt.json> --chain --rpc <url> --registry <account>
+# OK (elivo-direct-receipt-2, 5 payouts)
+pnpm verify-receipt <proof.json> --chain --rpc <url> --registry <account> [--account <your CLABE>]
+# OK (elivo-payee-proof-1, payout 3 of 5 in <issuer>/<receipt_id>)
+```
+
+In code: `packages/shared/src/direct-receipt-v2.ts` and `packages/shared/src/merkle.ts` (both browser-safe).
+
+## Issuing one
+
+```bash
+pnpm issue-receipt samples/payroll-results.csv --id <receipt-id> --issuer <your-testnet-account> --v2 [--pq]
+```
+
+This writes three things to `.data/receipts/`:
+- the receipt, `direct-<issuer>-<id>.json`;
+- one proof per payee, `direct-<issuer>-<id>.payee-<i>.json`. Give each payee only their own;
+- the receipt salt, `direct-<issuer>-<id>.salt` (mode 0600).
+
+The command also prints the receipt salt once. It is a secret: with it, anyone holding a list of candidate accounts can link every row to a payee. Keep it with your records and never publish it.

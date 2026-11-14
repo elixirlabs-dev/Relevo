@@ -1,5 +1,5 @@
 /**
- * pnpm issue-receipt <results.csv> --id <receipt id> --issuer <account> [--rail SPEI] [--currency MXN] [--pq]
+ * pnpm issue-receipt <results.csv> --id <receipt id> --issuer <account> [--rail SPEI] [--currency MXN] [--pq] [--v2]
  *
  * Issues an elivo-direct-receipt-1 for payouts the issuer already made outside the escrow, on testnet:
  * builds the receipt from the results CSV, signs it with the issuer's receipt key, publishes that key
@@ -10,6 +10,10 @@
  * - With --pq the receipt is also signed with ML-DSA-65 (post-quantum), whose seed is
  *   .data/keys/receipt-mldsa-<issuer>.json; the issuer's key set in the registry then includes that key.
  * - The receipt and its payee salt are written to .data/receipts/. Keep the salt with your records.
+ * - With --v2 it issues an elivo-direct-receipt-2 instead: the signatures and the anchored hash cover a
+ *   Merkle root over the payouts, and one elivo-payee-proof-1 per payee is written next to the receipt
+ *   (<receipt>.payee-<i>.json), to hand to that payee only. The receipt salt is printed once: it is a
+ *   secret, keep it.
  *
  * Testnet prototype. Payout firms and SPEI receipts are simulated. Contract unaudited.
  */
@@ -26,16 +30,22 @@ import {
   parseResultsCsv,
   signDirectReceipt,
 } from "../packages/shared/src/direct-issue.ts";
+import {
+  anchorDirectReceiptV2,
+  buildDirectReceiptV2,
+  signDirectReceiptV2,
+} from "../packages/shared/src/direct-receipt-v2.ts";
 import { keyFromSeed, loadKeyFile } from "../packages/shared/src/keys.ts";
 import { LABEL } from "../packages/shared/src/label.ts";
 import { type MlDsaKey, mldsaFromSeed } from "../packages/shared/src/pq-keys.ts";
+import { writeDirectV2Files } from "./lib/direct-v2-files.ts";
 
 function arg(name: string, fallback?: string): string {
   const i = process.argv.indexOf(name);
   const v = i >= 0 ? process.argv[i + 1] : fallback;
   if (!v) {
     console.error(
-      "usage: pnpm issue-receipt <results.csv> --id <receipt id> --issuer <account> [--rail SPEI] [--currency MXN] [--pq]",
+      "usage: pnpm issue-receipt <results.csv> --id <receipt id> --issuer <account> [--rail SPEI] [--currency MXN] [--pq] [--v2]",
     );
     process.exit(2);
   }
@@ -91,6 +101,39 @@ async function main() {
 
   const version = await ensureIssuerKeys(chain.view.bind(chain), issuer, d.registry, receiptKey, pq);
   const salt = randomBytes(16);
+  const keyLine = `Receipt key version ${version}: ${receiptKey.publicKeyStr}${pq ? " + ML-DSA-65 (post-quantum)" : ""}`;
+  const verifyLine = (f: string) =>
+    `Verify: pnpm verify-receipt ${f} --chain --rpc ${d.rpcUrl} --registry ${d.registry}`;
+
+  if (process.argv.includes("--v2")) {
+    const r2 = signDirectReceiptV2(
+      buildDirectReceiptV2(rows, {
+        network: "testnet",
+        registry: d.registry,
+        issuer: issuerId,
+        receipt_id: id,
+        rail,
+        currency,
+        salt,
+      }),
+      receiptKey.seed,
+      pq,
+    );
+    const anchored = await anchorDirectReceiptV2(issuer, d.registry, r2);
+    const files = writeDirectV2Files(join(".data", "receipts"), `direct-${issuerId}-${id}`, r2, salt);
+    console.log(keyLine);
+    console.log(`Anchored ${anchored.hash} (elivo-direct-receipt-2): ${chain.explorerTx(anchored.txHash)}`);
+    console.log(`Wrote ${files.receipt}`);
+    console.log(
+      `Wrote ${files.proofs.length} payee proofs: ${files.proofs[0]} ... (give each payee only theirs)`,
+    );
+    console.log(
+      `Receipt salt (SECRET, keep it with your records; also in ${files.salt}): ${salt.toString("hex")}`,
+    );
+    console.log(verifyLine(files.receipt));
+    return;
+  }
+
   const receipt = signDirectReceipt(
     buildDirectReceipt(rows, {
       network: "testnet",
@@ -110,12 +153,10 @@ async function main() {
   const out = join(".data", "receipts", `direct-${issuerId}-${id}.json`);
   writeFileSync(out, `${JSON.stringify(receipt, null, 2)}\n`);
   writeFileSync(join(".data", "receipts", `direct-${issuerId}-${id}.salt`), `${salt.toString("hex")}\n`);
-  console.log(
-    `Receipt key version ${version}: ${receiptKey.publicKeyStr}${pq ? " + ML-DSA-65 (post-quantum)" : ""}`,
-  );
+  console.log(keyLine);
   console.log(`Anchored ${hash}: ${chain.explorerTx(txHash)}`);
   console.log(`Wrote ${out}`);
-  console.log(`Verify: pnpm verify-receipt ${out} --chain --rpc ${d.rpcUrl} --registry ${d.registry}`);
+  console.log(verifyLine(out));
 }
 
 main().catch((e) => {
