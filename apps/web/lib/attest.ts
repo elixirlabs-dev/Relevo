@@ -14,13 +14,22 @@ export interface Attestation {
   attested_at_ns: string;
 }
 
-/** sessionStorage key for an attest sent from this tab, so a wallet that reloads the page is picked up. */
+/**
+ * sessionStorage key for an attest sent from this tab, so a wallet that reloads the page is picked up:
+ * /verify restores the receipt text, verifies it again, and the panel re-reads the list.
+ */
 export const ATTEST_PENDING_KEY = "elivo-attest-pending";
 export interface PendingAttest {
   issuer: string;
   receipt_id: string;
   account: string;
+  /** The receipt text that verified, to check again after the reload. */
+  text: string;
+  /** When the attest was sent (ms since epoch). */
+  at: number;
 }
+/** A pending attest older than this is dropped: the wallet never came back. */
+export const PENDING_ATTEST_TTL_MS = 10 * 60_000;
 
 export function attestTx(p: { registry: string; issuer: string; receiptId: string; hash: string }): TxSpec {
   return {
@@ -67,19 +76,25 @@ export function attestErrorWords(e: unknown): string {
   return msg || "The transaction did not go through.";
 }
 
-export function readPendingAttest(storage: Storage | null): PendingAttest | null {
+/** The pending attest, if any; a malformed or stale one (over 10 minutes old) is removed. */
+export function readPendingAttest(storage: Storage | null, now = Date.now()): PendingAttest | null {
+  let p: PendingAttest | null = null;
   try {
     const raw = storage?.getItem(ATTEST_PENDING_KEY);
-    const p = raw ? (JSON.parse(raw) as PendingAttest) : null;
-    return p &&
-      typeof p.issuer === "string" &&
-      typeof p.receipt_id === "string" &&
-      typeof p.account === "string"
-      ? p
-      : null;
-  } catch {
-    return null;
-  }
+    if (!raw) return null;
+    p = JSON.parse(raw) as PendingAttest;
+  } catch {}
+  const ok =
+    !!p &&
+    typeof p.issuer === "string" &&
+    typeof p.receipt_id === "string" &&
+    typeof p.account === "string" &&
+    typeof p.text === "string" &&
+    typeof p.at === "number" &&
+    now - p.at >= 0 &&
+    now - p.at <= PENDING_ATTEST_TTL_MS;
+  if (!ok) writePendingAttest(storage, null);
+  return ok ? p : null;
 }
 
 export function writePendingAttest(storage: Storage | null, p: PendingAttest | null): void {

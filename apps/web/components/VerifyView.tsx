@@ -3,6 +3,7 @@ import { LABEL } from "@elivo/shared/label";
 import { formatUsdc } from "@elivo/shared/money";
 import { directReceiptToCsv, receiptToCsv } from "@elivo/shared/receipt-csv";
 import { useEffect, useRef, useState } from "react";
+import { readPendingAttest, writePendingAttest } from "../lib/attest.ts";
 import { decodeShare } from "../lib/share.ts";
 import { type CheckId, type VerifyOutcome, verifyAgainstChain } from "../lib/verify.ts";
 import { Attestations, type AttestationsProps } from "./Attestations.tsx";
@@ -20,6 +21,14 @@ const CHECK_NAME: Record<CheckId, string> = {
   anchor: "Anchored on-chain",
   totals: "Totals",
   checked_before: "Checked before payment",
+};
+
+const session = (): Storage | null => {
+  try {
+    return window.sessionStorage;
+  } catch {
+    return null;
+  }
 };
 
 /** Hands the browser a file to save (a Blob link, clicked once). */
@@ -64,15 +73,18 @@ export function VerifyView({ app, verify, save = saveFile, print, fragment, copy
     setBusy(false);
   };
 
-  const run = async (input: string) => {
+  /** Checks `input`; resolves to the outcome (null if the check threw or a newer run replaced it). */
+  const run = async (input: string): Promise<VerifyOutcome | null> => {
     edit(input);
     const id = runId.current;
     setBusy(true);
     try {
       const o = await check(input);
       if (id === runId.current) setOutcome(o);
+      return id === runId.current ? o : null;
     } catch (e) {
       if (id === runId.current) setError((e as Error).message);
+      return null;
     } finally {
       if (id === runId.current) setBusy(false);
     }
@@ -94,10 +106,21 @@ export function VerifyView({ app, verify, save = saveFile, print, fragment, copy
     if (shared.current) return;
     shared.current = true;
     const f = fragment ?? window.location.hash;
-    if (!f.startsWith("#r=")) return;
-    decodeShare(f).then((t) =>
-      t ? run(t) : setError("This share link is broken or incomplete: ask for the link again."),
-    );
+    if (!f.startsWith("#r=")) {
+      // Back from a wallet that reloaded the page mid-attest: check that receipt again, so the
+      // attestations panel mounts and re-reads the list (or reports the cancel). If it no longer
+      // verifies, the panel never mounts, so drop the pending attest here.
+      const left = readPendingAttest(session());
+      if (left)
+        run(left.text).then((o) => {
+          if (!o?.ok) writePendingAttest(session(), null);
+        });
+      return;
+    }
+    decodeShare(f).then((t) => {
+      if (t) run(t);
+      else setError("This share link is broken or incomplete: ask for the link again.");
+    });
   }, []);
 
   const r = outcome?.receipt;
@@ -253,6 +276,7 @@ export function VerifyView({ app, verify, save = saveFile, print, fragment, copy
           issuer={anchored.issuer}
           receiptId={anchored.id}
           hash={outcome.hash}
+          text={text}
           network={app.network}
           {...attest}
         />

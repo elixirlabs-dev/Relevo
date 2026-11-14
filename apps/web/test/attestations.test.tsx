@@ -30,6 +30,8 @@ type Att = { attester: string; attested_at_ns: string };
 function fakeChain(atts: Att[], policy: object | Error = POLICY) {
   const list = [...atts];
   const sent: TxSpec[] = [];
+  /** The pending attest in sessionStorage at the moment each transaction went to the wallet. */
+  const pendings: Array<string | null> = [];
   const calls: Array<{ contract: string; method: string; args?: object }> = [];
   const view = async <T,>(contract: string, method: string, args?: object): Promise<T> => {
     calls.push({ contract, method, args });
@@ -50,14 +52,23 @@ function fakeChain(atts: Att[], policy: object | Error = POLICY) {
       send: async (tx) => {
         if (fail) throw new Error(fail);
         sent.push(tx);
+        pendings.push(sessionStorage.getItem(ATTEST_PENDING_KEY));
         list.push({ attester: acct as string, attested_at_ns: NS });
       },
     };
   };
-  return { view, port, sent, calls, list };
+  return { view, port, sent, calls, list, pendings };
 }
 
-const props = { registry: REGISTRY, dao: DAO, issuer: ISSUER, receiptId: RID, hash: "HV2", retryMs: 1 };
+const props = {
+  registry: REGISTRY,
+  dao: DAO,
+  issuer: ISSUER,
+  receiptId: RID,
+  hash: "HV2",
+  text: "{}",
+  retryMs: 1,
+};
 
 beforeEach(() => {
   sessionStorage.clear();
@@ -136,6 +147,13 @@ describe("Attestations", () => {
       },
     ]);
     expect(screen.queryByRole("button", { name: "Attest that you checked this receipt" })).toBeNull();
+    // While the wallet had the transaction, the receipt text was kept for a reload; it is gone after.
+    expect(JSON.parse(c.pendings[0] as string)).toMatchObject({
+      issuer: ISSUER,
+      receipt_id: RID,
+      account: "auditor.testnet",
+      text: "{}",
+    });
     expect(sessionStorage.getItem(ATTEST_PENDING_KEY)).toBeNull();
   });
 
@@ -163,7 +181,13 @@ describe("Attestations", () => {
   it("after a wallet redirect, re-reads the list until the chain shows the attestation", async () => {
     sessionStorage.setItem(
       ATTEST_PENDING_KEY,
-      JSON.stringify({ issuer: ISSUER, receipt_id: RID, account: "auditor.testnet" }),
+      JSON.stringify({
+        issuer: ISSUER,
+        receipt_id: RID,
+        account: "auditor.testnet",
+        text: "{}",
+        at: Date.now(),
+      }),
     );
     const c = fakeChain([]);
     let reads = 0;
@@ -213,6 +237,121 @@ describe("VerifyView's attestations panel", () => {
       contract: REGISTRY,
       method: "get_attestations",
       args: { issuer: v2.issuer, receipt_id: v2.receipt_id },
+    });
+  });
+
+  describe("after a wallet reloaded the page", () => {
+    const pending = (text: string) =>
+      sessionStorage.setItem(
+        ATTEST_PENDING_KEY,
+        JSON.stringify({ issuer: ISSUER, receipt_id: RID, account: "auditor.testnet", text, at: Date.now() }),
+      );
+    afterEach(() => window.history.replaceState(null, "", "/"));
+
+    it("restores the receipt, verifies it again and shows the new attester once the chain has it", async () => {
+      const { readFileSync } = await import("node:fs");
+      const text = readFileSync("apps/web/public/receipts/testnet-direct-payroll-v2.json", "utf8");
+      const v2 = JSON.parse(text);
+      const ok: VerifyOutcome = { receipt: null, direct: null, directV2: v2, hash: "HV2", ok: true, checks };
+      sessionStorage.setItem(
+        ATTEST_PENDING_KEY,
+        JSON.stringify({
+          issuer: v2.issuer,
+          receipt_id: v2.receipt_id,
+          account: "auditor.testnet",
+          text,
+          at: Date.now(),
+        }),
+      );
+      window.history.replaceState(null, "", "/verify?transactionHashes=abc");
+      const c = fakeChain([{ attester: COUNCIL, attested_at_ns: NS }]);
+      let reads = 0;
+      const lagging = async <T,>(contract: string, method: string, args?: object): Promise<T> => {
+        // The chain catches up on the second read.
+        if (method === "get_attestations" && ++reads === 2)
+          c.list.push({ attester: "auditor.testnet", attested_at_ns: NS });
+        return c.view<T>(contract, method, args);
+      };
+      const verify = vi.fn(async () => ok);
+      render(
+        <VerifyView
+          app={app}
+          verify={verify}
+          attest={{ view: lagging, wallet: { port: c.port("auditor.testnet"), wallets }, retryMs: 1 }}
+        />,
+      );
+      expect(await screen.findByText("You attested this receipt as auditor.testnet.")).toBeTruthy();
+      expect(verify).toHaveBeenCalledWith(text);
+      expect((screen.getByLabelText("Receipt JSON") as HTMLTextAreaElement).value).toBe(text);
+      expect(screen.getByText("auditor.testnet · 2026-11-14 12:00:00 UTC")).toBeTruthy();
+      expect(sessionStorage.getItem(ATTEST_PENDING_KEY)).toBeNull();
+    });
+
+    it("after a cancel (?errorCode), says nothing was attested once, then clears it", async () => {
+      const { readFileSync } = await import("node:fs");
+      const text = readFileSync("apps/web/public/receipts/testnet-direct-payroll-v2.json", "utf8");
+      const v2 = JSON.parse(text);
+      const ok: VerifyOutcome = { receipt: null, direct: null, directV2: v2, hash: "HV2", ok: true, checks };
+      sessionStorage.setItem(
+        ATTEST_PENDING_KEY,
+        JSON.stringify({
+          issuer: v2.issuer,
+          receipt_id: v2.receipt_id,
+          account: "auditor.testnet",
+          text,
+          at: Date.now(),
+        }),
+      );
+      window.history.replaceState(null, "", "/verify?errorCode=userRejected");
+      const c = fakeChain([]);
+      const deps = { view: c.view, wallet: { port: c.port("auditor.testnet"), wallets }, retryMs: 1 };
+      render(<VerifyView app={app} verify={async () => ok} attest={deps} />);
+      expect(
+        await screen.findByText("The wallet transaction was cancelled; nothing was attested."),
+      ).toBeTruthy();
+      expect(await screen.findByText("No one has attested this receipt yet.")).toBeTruthy();
+      expect(sessionStorage.getItem(ATTEST_PENDING_KEY)).toBeNull();
+      // Verifying the same receipt again (same URL) shows no stale cancel message.
+      cleanup();
+      render(<VerifyView app={app} verify={async () => ok} attest={deps} />);
+      expect((screen.getByLabelText("Receipt JSON") as HTMLTextAreaElement).value).toBe("");
+      paste(text);
+      expect(await screen.findByText("No one has attested this receipt yet.")).toBeTruthy();
+      expect(screen.queryByText("The wallet transaction was cancelled; nothing was attested.")).toBeNull();
+    });
+
+    it("drops the pending attest when the restored receipt no longer verifies", async () => {
+      pending("{}");
+      const bad: VerifyOutcome = {
+        receipt: null,
+        direct: null,
+        hash: null,
+        ok: false,
+        checks: [{ id: "format", ok: false, detail: "Not a receipt" }],
+      };
+      render(<VerifyView app={app} verify={async () => bad} attest={{ view: fakeChain([]).view }} />);
+      expect(await screen.findByText("✗ File: Not a receipt")).toBeTruthy();
+      await waitFor(() => expect(sessionStorage.getItem(ATTEST_PENDING_KEY)).toBeNull());
+    });
+
+    it("ignores a pending attest older than 10 minutes", async () => {
+      sessionStorage.setItem(
+        ATTEST_PENDING_KEY,
+        JSON.stringify({
+          issuer: ISSUER,
+          receipt_id: RID,
+          account: "auditor.testnet",
+          text: "{}",
+          at: Date.now() - 11 * 60_000,
+        }),
+      );
+      const verify = vi.fn(async () => {
+        throw new Error("should not run");
+      });
+      render(<VerifyView app={app} verify={verify} />);
+      await waitFor(() => expect(sessionStorage.getItem(ATTEST_PENDING_KEY)).toBeNull());
+      expect(verify).not.toHaveBeenCalled();
+      expect((screen.getByLabelText("Receipt JSON") as HTMLTextAreaElement).value).toBe("");
     });
   });
 

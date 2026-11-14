@@ -35,6 +35,8 @@ export interface AttestationsProps {
   receiptId: string;
   /** The hash that just verified against the anchor. */
   hash: string;
+  /** The receipt text that verified: kept with a pending attest so /verify can check it again after a wallet reload. */
+  text: string;
   /** Injectable for tests. */
   view?: View;
   /** Injectable for tests; by default the Wallet Selector port from lib/wallet.ts. */
@@ -52,6 +54,7 @@ export function Attestations({
   issuer,
   receiptId,
   hash,
+  text,
   view = viewCall,
   wallet,
   retryMs = 2_000,
@@ -128,7 +131,7 @@ export function Attestations({
     setError(null);
     setChoosing(false);
     setBusy("Approve the transaction in your wallet…");
-    writePendingAttest(session(), { issuer, receipt_id: receiptId, account: acct });
+    writePendingAttest(session(), { issuer, receipt_id: receiptId, account: acct, text, at: Date.now() });
     try {
       await p.send(attestTx({ registry, issuer, receiptId, hash }));
       setBusy("Waiting for the chain to record your attestation…");
