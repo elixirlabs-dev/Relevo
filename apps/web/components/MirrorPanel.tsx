@@ -6,6 +6,7 @@ import {
   sepoliaRpc,
   sepoliaTxUrl,
   TESTNET_MPC_ROOT,
+  TESTNET_MPC_SIGNER,
   verifyMirrorTx,
 } from "@elivo/shared/evm-mirror";
 import { useEffect, useRef, useState } from "react";
@@ -39,7 +40,10 @@ type State =
   | { kind: "none" }
   | { kind: "missing"; entry: MirrorEntry }
   | { kind: "error"; message: string }
-  | { kind: "checked"; entry: MirrorEntry; tx: MirrorTx; verdict: MirrorVerdict };
+  | { kind: "checked"; entry: MirrorEntry; tx: MirrorTx; verdict: MirrorVerdict; root: Root };
+
+/** The MPC root key used, and why it is the built-in copy if reading it from the chain failed. */
+type Root = { key: string; readError: string | null };
 
 /**
  * "Mirrored on Ethereum": for a receipt the issuer also mirrored on Ethereum Sepolia with NEAR Chain
@@ -74,15 +78,25 @@ export function MirrorPanel({
           receipt_id: receiptId,
         });
         if (!anchor) return setState({ kind: "error", message: `${issuer} has no anchor for ${receiptId}` });
+        // The root key comes from the signer contract; the built-in copy is only a fallback.
+        let root: Root;
+        try {
+          const key = await view<unknown>(TESTNET_MPC_SIGNER, "public_key", {});
+          if (typeof key !== "string" || !key.startsWith("secp256k1:"))
+            throw new Error(`unexpected answer ${JSON.stringify(key)}`);
+          root = { key, readError: null };
+        } catch (e) {
+          root = { key: TESTNET_MPC_ROOT, readError: (e as Error).message };
+        }
         const tx = await getTx(entry.tx_hash);
         if (!tx) return setState({ kind: "missing", entry });
         const verdict = verifyMirrorTx(tx, {
           issuer,
           receipt_id: receiptId,
           receipt_hash: anchor.receipt_hash,
-          rootKey: TESTNET_MPC_ROOT,
+          rootKey: root.key,
         });
-        setState({ kind: "checked", entry, tx, verdict });
+        setState({ kind: "checked", entry, tx, verdict, root });
       } catch (e) {
         setState({ kind: "error", message: (e as Error).message });
       }
@@ -115,23 +129,36 @@ export function MirrorPanel({
       {state.kind === "checked" && <Checked {...state} issuer={issuer} />}
       {state.kind === "checked" && link(state.entry.tx_hash)}
       <p className="muted small" style={{ marginTop: 8 }}>
-        The issuer's NEAR account signed this Ethereum transaction through NEAR's MPC network (Chain
-        Signatures). The hash is compared with the one anchored on NEAR, and the address is worked out in this
-        browser from the MPC network's public key.
+        {`The issuer's NEAR account signed this Ethereum transaction through NEAR's MPC network (Chain Signatures). The hash is compared with the one anchored on NEAR. This browser recovers the sender from the transaction's signature and compares it with the address derived from the MPC network's public key, ${
+          state.kind === "checked" && state.root.readError
+            ? `built into this app, because reading it from ${TESTNET_MPC_SIGNER} failed: ${state.root.readError}`
+            : `read from ${TESTNET_MPC_SIGNER}`
+        }.`}
       </p>
     </Sticker>
   );
 }
 
 function Checked({ tx, verdict, issuer }: { tx: MirrorTx; verdict: MirrorVerdict; issuer: string }) {
-  const { checks, expectedFrom } = verdict;
+  const { checks, expectedFrom, recoveredFrom } = verdict;
   const derived = `the Ethereum address NEAR's MPC network derives for ${issuer}`;
+  if (!checks.type2)
+    return (
+      <>
+        <div className="row" style={{ margin: "8px 0" }}>
+          <Chip tone="rose">Does not check out</Chip>
+        </div>
+        <p className="bad">✗ Not an EIP-1559 (type 2) transaction, so its sender can't be checked</p>
+      </>
+    );
   const lines = [
     {
       ok: checks.from,
       text: checks.from
-        ? `Sent from ${expectedFrom} — ${derived}`
-        : `Sent from ${tx.from.toLowerCase()}, not ${expectedFrom} — ${derived}`,
+        ? `Sent from ${recoveredFrom} — ${derived}`
+        : recoveredFrom
+          ? `Sent from ${recoveredFrom}, not ${expectedFrom} — ${derived}`
+          : `The signature does not recover to a sender, so it is not ${expectedFrom} — ${derived}`,
     },
     {
       ok: checks.payload,
@@ -143,8 +170,15 @@ function Checked({ tx, verdict, issuer }: { tx: MirrorTx; verdict: MirrorVerdict
       ok: checks.selfSend && checks.chain,
       text:
         checks.selfSend && checks.chain
-          ? "A 0-value transaction to itself on Ethereum Sepolia"
+          ? "Sent back to itself on Ethereum Sepolia"
           : `Not a transaction to itself on Ethereum Sepolia: ${verdict.problems.filter((p) => p.startsWith("Sent to") || p.startsWith("On chain") || p.startsWith("The transaction names")).join("; ")}`,
+    },
+    {
+      ok: checks.included,
+      text:
+        checks.included && tx.blockNumber
+          ? `Included in Sepolia block ${Number(BigInt(tx.blockNumber))}`
+          : "Not yet included in a block",
     },
   ];
   return (

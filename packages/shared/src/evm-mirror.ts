@@ -38,8 +38,12 @@ export function derivePublicKey(rootKey: string, accountId: string, path: string
   const xy = b58decode(b58);
   if (xy.length !== 64) throw new Error(`a secp256k1 root key is 64 bytes, got ${xy.length}`);
   const root = secp256k1.Point.fromBytes(concatBytes(new Uint8Array([4]), xy));
-  const eps = BigInt(`0x${bytesToHex(sha3_256(utf8ToBytes(`${EPSILON_PREFIX}${accountId},${path}`)))}`);
-  return root.add(secp256k1.Point.BASE.multiply(eps)).toBytes(false);
+  return root.add(secp256k1.Point.BASE.multiply(mpcEpsilon(accountId, path))).toBytes(false);
+}
+
+/** The tweak the MPC network adds to its root key for this account and path. */
+export function mpcEpsilon(accountId: string, path: string): bigint {
+  return BigInt(`0x${bytesToHex(sha3_256(utf8ToBytes(`${EPSILON_PREFIX}${accountId},${path}`)))}`);
 }
 
 /** The Ethereum address of an uncompressed secp256k1 public key (0x04 || x || y), lower case. */
@@ -83,12 +87,94 @@ export function parseMirrorCalldata(hex: string): MirrorRecord | null {
   };
 }
 
+/**
+ * A transaction as eth_getTransactionByHash returns it (hex quantities). `from` is what the RPC claims
+ * and is never trusted: the sender is recovered from the signature over the other fields.
+ */
 export interface MirrorTx {
-  from: string;
-  to: string | null;
-  input: string;
-  /** Hex quantity, as eth_getTransactionByHash returns it. */
+  type?: string;
   chainId?: string;
+  nonce: string;
+  maxPriorityFeePerGas?: string;
+  maxFeePerGas?: string;
+  gas: string;
+  to: string | null;
+  value: string;
+  input: string;
+  accessList?: ReadonlyArray<{ address: string; storageKeys: readonly string[] }>;
+  r: string;
+  s: string;
+  yParity?: string;
+  /** For type-2 transactions the same as yParity. */
+  v?: string;
+  /** As the RPC reports it; not used for any check. */
+  from?: string;
+  /** null while the transaction is pending. */
+  blockNumber?: string | null;
+}
+
+type Rlp = Uint8Array | Rlp[];
+
+const lengthPrefix = (len: number, offset: number): Uint8Array => {
+  if (len < 56) return new Uint8Array([offset + len]);
+  const be = qtyBytes(BigInt(len));
+  return concatBytes(new Uint8Array([offset + 55 + be.length]), be);
+};
+
+/** Recursive Length Prefix encoding (Ethereum yellow paper, appendix B). */
+export function rlpEncode(x: Rlp): Uint8Array {
+  if (x instanceof Uint8Array)
+    return x.length === 1 && x[0] < 0x80 ? x : concatBytes(lengthPrefix(x.length, 0x80), x);
+  const body = concatBytes(...x.map(rlpEncode));
+  return concatBytes(lengthPrefix(body.length, 0xc0), body);
+}
+
+/** A quantity as minimal big-endian bytes (zero is empty). */
+function qtyBytes(n: bigint): Uint8Array {
+  if (n === 0n) return new Uint8Array();
+  let h = n.toString(16);
+  if (h.length % 2) h = `0${h}`;
+  return hexToBytes(h);
+}
+const qty = (hex: string | undefined, name: string): Uint8Array => {
+  if (hex === undefined || hex === null) throw new Error(`the transaction has no ${name}`);
+  return qtyBytes(BigInt(hex));
+};
+const data = (hex: string): Uint8Array => {
+  const h = hex.startsWith("0x") ? hex.slice(2) : hex;
+  return hexToBytes(h.length % 2 ? `0${h}` : h);
+};
+
+const isType2 = (tx: MirrorTx) => tx.type !== undefined && tx.type !== null && BigInt(tx.type) === 2n;
+
+/** 0x02 || rlp([chainId, nonce, maxPriorityFeePerGas, maxFeePerGas, gas, to, value, data, accessList]). */
+export function unsignedType2Payload(tx: MirrorTx): Uint8Array {
+  if (!isType2(tx)) throw new Error("not an EIP-1559 (type 2) transaction");
+  const fields: Rlp = [
+    qty(tx.chainId, "chainId"),
+    qty(tx.nonce, "nonce"),
+    qty(tx.maxPriorityFeePerGas, "maxPriorityFeePerGas"),
+    qty(tx.maxFeePerGas, "maxFeePerGas"),
+    qty(tx.gas, "gas"),
+    tx.to ? data(tx.to) : new Uint8Array(),
+    qty(tx.value, "value"),
+    data(tx.input),
+    (tx.accessList ?? []).map((a) => [data(a.address), a.storageKeys.map(data)]),
+  ];
+  return concatBytes(new Uint8Array([2]), rlpEncode(fields));
+}
+
+/**
+ * The address that signed a type-2 transaction, recovered from r, s and yParity over the rebuilt
+ * unsigned payload. Throws for any other transaction type.
+ */
+export function recoverMirrorSender(tx: MirrorTx): string {
+  if (!isType2(tx)) throw new Error("not an EIP-1559 (type 2) transaction");
+  const hash = keccak_256(unsignedType2Payload(tx));
+  const parity = Number(BigInt(tx.yParity ?? tx.v ?? "0x"));
+  if (parity !== 0 && parity !== 1) throw new Error(`bad yParity ${tx.yParity ?? tx.v}`);
+  const sig = new secp256k1.Signature(BigInt(tx.r), BigInt(tx.s), parity);
+  return evmAddressOf(sig.recoverPublicKey(hash).toBytes(false));
 }
 
 export interface MirrorVerdict {
@@ -96,21 +182,39 @@ export interface MirrorVerdict {
   problems: string[];
   /** The Ethereum address NEAR's MPC network derives for the issuer. */
   expectedFrom: string;
-  checks: { from: boolean; selfSend: boolean; payload: boolean; chain: boolean };
+  /** The sender recovered from the signature, or null if it couldn't be. */
+  recoveredFrom: string | null;
+  checks: {
+    type2: boolean;
+    from: boolean;
+    selfSend: boolean;
+    payload: boolean;
+    chain: boolean;
+    included: boolean;
+  };
 }
 
 /**
- * Checks a Sepolia transaction mirrors the expected anchor: sent by the issuer's derived address, to
- * itself, on Sepolia, carrying exactly this issuer, receipt id and hash. `receipt_hash` must come from
- * the chain anchor, not from the receipt file.
+ * Checks a Sepolia transaction mirrors the expected anchor: a type-2 transaction whose signature
+ * recovers to the issuer's derived address, sent to itself, on Sepolia, included in a block, carrying
+ * exactly this issuer, receipt id and hash. `receipt_hash` must come from the chain anchor, not from the
+ * receipt file. Nothing the RPC says about the sender is trusted.
  */
 export function verifyMirrorTx(tx: MirrorTx, expected: MirrorRecord & { rootKey: string }): MirrorVerdict {
   const problems: string[] = [];
   const expectedFrom = deriveEvmAddress(expected.rootKey, expected.issuer, MIRROR_PATH);
-  const from = tx.from.toLowerCase();
+  const type2 = isType2(tx);
+  let from: string | null = null;
+  if (!type2) problems.push("Not an EIP-1559 (type 2) transaction, so its sender can't be checked");
+  else
+    try {
+      from = recoverMirrorSender(tx);
+    } catch (e) {
+      problems.push(`The signature does not recover to a sender: ${(e as Error).message}`);
+    }
   const fromOk = from === expectedFrom;
-  if (!fromOk)
-    problems.push(`Sent from ${from}, not ${expectedFrom}, the address derived for ${expected.issuer}`);
+  if (from && !fromOk)
+    problems.push(`Signed by ${from}, not ${expectedFrom}, the address derived for ${expected.issuer}`);
 
   const to = tx.to?.toLowerCase() ?? null;
   const selfSend = to !== null && to === from;
@@ -136,11 +240,15 @@ export function verifyMirrorTx(tx: MirrorTx, expected: MirrorRecord & { rootKey:
     if (!chain) problems.push(`On chain ${id}, not Ethereum Sepolia (${SEPOLIA_CHAIN_ID})`);
   }
 
+  const included = tx.blockNumber !== undefined && tx.blockNumber !== null;
+  if (!included) problems.push("Not yet included in a block");
+
   return {
     ok: problems.length === 0,
     problems,
     expectedFrom,
-    checks: { from: fromOk, selfSend, payload, chain },
+    recoveredFrom: from,
+    checks: { type2, from: fromOk, selfSend, payload, chain, included },
   };
 }
 

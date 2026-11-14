@@ -1,13 +1,23 @@
+import { privateKeyToAccount } from "viem/accounts";
 import { describe, expect, it } from "vitest";
+import {
+  childSk,
+  type FixtureOpts,
+  signedMirrorTx,
+  testRootKey,
+} from "../../../scripts/lib/mirror-fixture.ts";
 import {
   deriveEvmAddress,
   MIRROR_PATH,
   mirrorCalldata,
   parseMirrorCalldata,
+  recoverMirrorSender,
+  rlpEncode,
   SEPOLIA_CHAIN_ID,
   SEPOLIA_RPCS,
   sepoliaRpc,
   TESTNET_MPC_ROOT,
+  unsignedType2Payload,
   upsertMirror,
   verifyMirrorTx,
 } from "../src/evm-mirror.ts";
@@ -18,13 +28,14 @@ const HASH = "8Q4kyb3Wq3oGTVzT5jK3w9d1nqQ7Tgq8f2k8ZpN1x4uY";
 // Checked against the signer contract's derived_public_key view for this account and path.
 const ADDRESS = "0xd58bd0be27a98d505c73bb4e24722cacf4342f8e";
 
-const expected = { issuer: ISSUER, receipt_id: RID, receipt_hash: HASH, rootKey: TESTNET_MPC_ROOT };
-const goodTx = () => ({
-  from: ADDRESS,
-  to: ADDRESS,
-  input: mirrorCalldata(ISSUER, RID, HASH),
-  chainId: "0xaa36a7",
-});
+// Signed transactions need a private key, so verifyMirrorTx is tested against a test MPC root key.
+const ROOT = testRootKey();
+const DERIVED = deriveEvmAddress(ROOT, ISSUER, MIRROR_PATH);
+const OTHER_SK = 0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdefn;
+const OTHER = privateKeyToAccount(`0x${OTHER_SK.toString(16).padStart(64, "0")}`).address.toLowerCase();
+const expected = { issuer: ISSUER, receipt_id: RID, receipt_hash: HASH, rootKey: ROOT };
+const signed = (o: Partial<FixtureOpts> = {}) =>
+  signedMirrorTx({ issuer: ISSUER, receiptId: RID, receiptHash: HASH, ...o });
 
 describe("deriveEvmAddress", () => {
   it("derives the issuer's Ethereum address from the testnet MPC root key", () => {
@@ -71,69 +82,146 @@ describe("mirror calldata", () => {
   });
 });
 
+describe("rlpEncode", () => {
+  // Vectors from the Ethereum RLP spec.
+  const b = (s: string) => new TextEncoder().encode(s);
+  const hex = (u: Uint8Array) => Buffer.from(u).toString("hex");
+  it("encodes bytes and lists", () => {
+    expect(hex(rlpEncode(b("dog")))).toBe("83646f67");
+    expect(hex(rlpEncode([b("cat"), b("dog")]))).toBe("c88363617483646f67");
+    expect(hex(rlpEncode(new Uint8Array()))).toBe("80");
+    expect(hex(rlpEncode([]))).toBe("c0");
+    expect(hex(rlpEncode(new Uint8Array([0x0f])))).toBe("0f");
+    expect(hex(rlpEncode(new Uint8Array([0x04, 0x00])))).toBe("820400");
+    expect(hex(rlpEncode([[], [[]], [[], [[]]]]))).toBe("c7c0c1c0c3c0c1c0");
+    const long = b("Lorem ipsum dolor sit amet, consectetur adipisicing elit");
+    expect(hex(rlpEncode(long)).slice(0, 4)).toBe("b838");
+  });
+});
+
+describe("recoverMirrorSender", () => {
+  it("recovers the signer of a real signed type-2 transaction (signed locally with viem)", async () => {
+    const tx = await signed({ signerSk: OTHER_SK });
+    expect(recoverMirrorSender(tx)).toBe(OTHER);
+    expect(recoverMirrorSender(await signed())).toBe(DERIVED);
+  });
+
+  it("rebuilds the exact unsigned payload the signer hashed (with an access list too)", async () => {
+    const tx = await signed();
+    expect(Buffer.from(unsignedType2Payload(tx)).toString("hex").slice(0, 2)).toBe("02");
+    const withList = {
+      ...tx,
+      accessList: [{ address: OTHER, storageKeys: [`0x${"00".repeat(31)}01`] }],
+    };
+    // A different access list is a different payload, so the same signature recovers someone else.
+    expect(recoverMirrorSender(withList)).not.toBe(DERIVED);
+  });
+
+  it("does not trust the RPC's `from`", async () => {
+    const tx = await signed({ signerSk: OTHER_SK });
+    expect(recoverMirrorSender({ ...tx, from: DERIVED })).toBe(OTHER);
+  });
+
+  it("refuses anything that is not a type-2 transaction", async () => {
+    const tx = await signed();
+    for (const type of ["0x0", "0x1", "0x3", undefined])
+      expect(() => recoverMirrorSender({ ...tx, type })).toThrow(/type 2/);
+  });
+});
+
 describe("verifyMirrorTx", () => {
-  it("accepts a self-send on Sepolia from the derived address carrying the anchored hash", () => {
+  it("the test root key behaves like the real one: the child key signs for the derived address", () => {
+    expect(
+      privateKeyToAccount(`0x${childSk(ISSUER).toString(16).padStart(64, "0")}`).address.toLowerCase(),
+    ).toBe(DERIVED);
+  });
+
+  it("accepts a mined self-send on Sepolia signed for the derived address, carrying the anchored hash", async () => {
     expect(SEPOLIA_CHAIN_ID).toBe(11155111);
-    const v = verifyMirrorTx(goodTx(), expected);
-    expect(v).toMatchObject({ ok: true, problems: [], expectedFrom: ADDRESS });
-    expect(v.checks).toEqual({ from: true, selfSend: true, payload: true, chain: true });
+    const v = verifyMirrorTx(await signed(), expected);
+    expect(v).toMatchObject({ ok: true, problems: [], expectedFrom: DERIVED, recoveredFrom: DERIVED });
+    expect(v.checks).toEqual({
+      type2: true,
+      from: true,
+      selfSend: true,
+      payload: true,
+      chain: true,
+      included: true,
+    });
   });
 
-  it("compares addresses without regard to case", () => {
-    const up = `0x${ADDRESS.slice(2).toUpperCase()}`;
-    expect(verifyMirrorTx({ ...goodTx(), from: up, to: up }, expected).ok).toBe(true);
-  });
-
-  it("flags a sender that is not the issuer's derived address", () => {
-    const other = "0x1111111111111111111111111111111111111111";
-    const v = verifyMirrorTx({ ...goodTx(), from: other, to: other }, expected);
+  it("flags a transaction signed by another key, even when the RPC claims the derived `from`", async () => {
+    const tx = await signed({ signerSk: OTHER_SK });
+    const v = verifyMirrorTx({ ...tx, from: DERIVED }, expected);
     expect(v.ok).toBe(false);
     expect(v.checks.from).toBe(false);
-    expect(v.problems).toContain(`Sent from ${other}, not ${ADDRESS}, the address derived for ${ISSUER}`);
+    expect(v.recoveredFrom).toBe(OTHER);
+    expect(v.problems).toContain(`Signed by ${OTHER}, not ${DERIVED}, the address derived for ${ISSUER}`);
   });
 
-  it("flags a transaction that is not a self-send", () => {
-    const v = verifyMirrorTx({ ...goodTx(), to: "0x2222222222222222222222222222222222222222" }, expected);
+  it("flags calldata swapped after signing (the signature then recovers someone else)", async () => {
+    const tx = await signed();
+    const v = verifyMirrorTx({ ...tx, input: mirrorCalldata(ISSUER, RID, "OtherHash") }, expected);
+    expect(v.checks.from).toBe(false);
+    expect(v.checks.payload).toBe(false);
+  });
+
+  it("flags a transaction that is not a self-send", async () => {
+    const to = "0x2222222222222222222222222222222222222222";
+    const v = verifyMirrorTx(await signed({ to }), expected);
     expect(v.checks).toMatchObject({ from: true, selfSend: false });
-    expect(v.problems).toContain("Sent to 0x2222222222222222222222222222222222222222, not back to itself");
+    expect(v.problems).toContain(`Sent to ${to}, not back to itself`);
   });
 
-  it("flags a contract creation (no recipient)", () => {
-    const v = verifyMirrorTx({ ...goodTx(), to: null }, expected);
+  it("flags a contract creation (no recipient)", async () => {
+    const v = verifyMirrorTx(await signed({ to: null }), expected);
     expect(v.checks.selfSend).toBe(false);
     expect(v.problems).toContain("Sent to no address, not back to itself");
   });
 
-  it("flags a different hash, issuer or receipt id in the calldata", () => {
-    for (const input of [
+  it("flags a different hash, issuer or receipt id in the calldata", async () => {
+    for (const data of [
       mirrorCalldata(ISSUER, RID, "OtherHash"),
       mirrorCalldata("someone.testnet", RID, HASH),
       mirrorCalldata(ISSUER, "payroll-2026-10", HASH),
     ]) {
-      const v = verifyMirrorTx({ ...goodTx(), input }, expected);
+      const v = verifyMirrorTx(await signed({ data }), expected);
       expect(v.ok).toBe(false);
       expect(v.checks).toMatchObject({ from: true, selfSend: true, payload: false, chain: true });
     }
-    expect(
-      verifyMirrorTx({ ...goodTx(), input: mirrorCalldata(ISSUER, RID, "OtherHash") }, expected).problems,
-    ).toContain(`Carries ${ISSUER}/${RID}:OtherHash, not ${ISSUER}/${RID}:${HASH}`);
+    const v = verifyMirrorTx(await signed({ data: mirrorCalldata(ISSUER, RID, "OtherHash") }), expected);
+    expect(v.problems).toContain(`Carries ${ISSUER}/${RID}:OtherHash, not ${ISSUER}/${RID}:${HASH}`);
   });
 
-  it("flags calldata that is not a mirror record", () => {
-    const v = verifyMirrorTx({ ...goodTx(), input: "0x" }, expected);
+  it("flags calldata that is not a mirror record", async () => {
+    const v = verifyMirrorTx(await signed({ data: "0x" }), expected);
     expect(v.checks.payload).toBe(false);
     expect(v.problems).toContain("The transaction data is not an elivo-mirror-1 record");
   });
 
-  it("flags another chain, or no chain id", () => {
-    const main = verifyMirrorTx({ ...goodTx(), chainId: "0x1" }, expected);
-    expect(main.checks.chain).toBe(false);
-    expect(main.problems).toContain("On chain 1, not Ethereum Sepolia (11155111)");
-    const none = verifyMirrorTx({ ...goodTx(), chainId: undefined }, expected);
-    expect(none.checks.chain).toBe(false);
-    expect(none.problems).toContain(
-      "The transaction names no chain id, so it is not bound to Ethereum Sepolia",
-    );
+  it("flags another chain", async () => {
+    const v = verifyMirrorTx(await signed({ chainId: 1 }), expected);
+    expect(v.checks).toMatchObject({ from: true, chain: false });
+    expect(v.problems).toContain("On chain 1, not Ethereum Sepolia (11155111)");
+  });
+
+  it("flags a pending transaction", async () => {
+    const v = verifyMirrorTx(await signed({ blockNumber: null }), expected);
+    expect(v.ok).toBe(false);
+    expect(v.checks).toMatchObject({ from: true, payload: true, included: false });
+    expect(v.problems).toContain("Not yet included in a block");
+  });
+
+  it("refuses a transaction that is not type 2", async () => {
+    const v = verifyMirrorTx({ ...(await signed()), type: "0x0" }, expected);
+    expect(v.ok).toBe(false);
+    expect(v.recoveredFrom).toBeNull();
+    expect(v.checks).toMatchObject({ type2: false, from: false });
+    expect(v.problems).toContain("Not an EIP-1559 (type 2) transaction, so its sender can't be checked");
+  });
+
+  it("with the real testnet root key, the issuer's address is 0xd58b…2f8e", () => {
+    expect(deriveEvmAddress(TESTNET_MPC_ROOT, ISSUER, MIRROR_PATH)).toBe(ADDRESS);
   });
 });
 

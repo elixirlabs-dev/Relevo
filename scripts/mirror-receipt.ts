@@ -16,12 +16,14 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { keccak256 } from "viem";
 import { Chain } from "../packages/shared/src/chain.ts";
 import { env, loadDeployment } from "../packages/shared/src/config.ts";
 import {
   deriveEvmAddress,
   MIRROR_PATH,
   type MirrorEntry,
+  type MirrorTx,
   mirrorCalldata,
   SEPOLIA_CHAIN_ID,
   sepoliaRpc,
@@ -36,6 +38,7 @@ import { LABEL } from "../packages/shared/src/label.ts";
 import { requestMpcSignature } from "../packages/shared/src/mpc-sign.ts";
 import {
   assembleSignedTx,
+  broadcastMirror,
   buildMirrorTx,
   mirrorSigningHash,
   recoverSigner,
@@ -54,7 +57,6 @@ function arg(name: string): string {
   return v;
 }
 
-const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const eth = (wei: bigint) => `${(Number(wei) / 1e18).toFixed(6)} Sepolia ETH`;
 
 async function main() {
@@ -124,23 +126,15 @@ async function main() {
     throw new Error(`the MPC signature recovers to ${signer}, not ${from}: not broadcasting`);
   const raw = assembleSignedTx(tx, sig);
 
-  const txHash = await sepoliaRpc<string>("eth_sendRawTransaction", [raw]);
-  console.log(`Sent on Sepolia: ${txHash}`);
-  let mined: { status: string } | null = null;
-  for (let i = 0; i < 40 && !mined; i++) {
-    await wait(3_000);
-    mined = await sepoliaRpc<{ status: string } | null>("eth_getTransactionReceipt", [txHash]).catch(
-      () => null,
-    );
-  }
-  if (!mined) throw new Error(`${txHash} is not mined after 2 minutes: check ${sepoliaTxUrl(txHash)}`);
-  if (mined.status !== "0x1") throw new Error(`${txHash} failed on Sepolia: ${sepoliaTxUrl(txHash)}`);
+  // The hash is computed locally, so a lost reply still finds this exact transaction.
+  console.log(`Sending on Sepolia: ${keccak256(raw)}`);
+  const { txHash, receipt } = await broadcastMirror(raw, (m, p) => sepoliaRpc(m, p));
+  if (receipt.status !== "0x1") throw new Error(`${txHash} failed on Sepolia: ${sepoliaTxUrl(txHash)}`);
+  console.log(`Mined in Sepolia block ${Number(BigInt(receipt.blockNumber))}`);
 
-  // Check what the chain now holds, the same way /verify will.
-  const onChain = await sepoliaRpc<{ from: string; to: string | null; input: string; chainId?: string }>(
-    "eth_getTransactionByHash",
-    [txHash],
-  );
+  // Check what the chain now holds, the same way /verify will (the sender is recovered, not trusted).
+  const onChain = await sepoliaRpc<MirrorTx | null>("eth_getTransactionByHash", [txHash]);
+  if (!onChain) throw new Error(`${txHash} is mined but the RPC can't find it: ${sepoliaTxUrl(txHash)}`);
   const v = verifyMirrorTx(onChain, {
     issuer: issuerId,
     receipt_id: receiptId,

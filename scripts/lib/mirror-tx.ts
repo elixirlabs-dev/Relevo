@@ -9,7 +9,7 @@ import {
   serializeTransaction,
   type TransactionSerializableEIP1559,
 } from "viem";
-import { SEPOLIA_CHAIN_ID } from "../../packages/shared/src/evm-mirror.ts";
+import { SEPOLIA_CHAIN_ID, sepoliaTxUrl } from "../../packages/shared/src/evm-mirror.ts";
 
 type Hex = `0x${string}`;
 const N = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n;
@@ -94,4 +94,43 @@ export async function recoverSigner(hash: Hex, sig: EvmSignature): Promise<strin
 
 export function assembleSignedTx(tx: TransactionSerializableEIP1559, sig: EvmSignature): Hex {
   return serializeTransaction(tx, sig);
+}
+
+type Rpc = <T>(method: string, params: unknown[]) => Promise<T>;
+/** The node already has this exact transaction, or its nonce is used (by it, if it was sent before). */
+const ALREADY_SENT = /already known|known transaction|nonce too low/i;
+/** The reply may have been lost after the node accepted the transaction. */
+const MAYBE_SENT = /timeout|fetch failed|ECONNRESET|ETIMEDOUT|socket hang up|\bHTTP 50[234]\b|\b429\b/i;
+
+/**
+ * Broadcasts a signed transaction and waits for it to be mined. The hash is computed locally
+ * (keccak256 of the raw bytes), so a lost reply, "already known" or "nonce too low" still lead to
+ * polling for this exact transaction; any other send error throws before polling.
+ */
+export async function broadcastMirror(
+  raw: Hex,
+  rpc: Rpc,
+  opts: { pollMs?: number; attempts?: number } = {},
+): Promise<{ txHash: Hex; receipt: { status: string; blockNumber: string } }> {
+  const txHash = keccak256(raw);
+  try {
+    const reply = await rpc<string>("eth_sendRawTransaction", [raw]);
+    if (typeof reply === "string" && reply.toLowerCase() !== txHash)
+      throw new Error(`the RPC answered ${reply}, not the local hash ${txHash}`);
+  } catch (e) {
+    const msg = (e as Error).message;
+    if (/not the local hash/.test(msg) || !(ALREADY_SENT.test(msg) || MAYBE_SENT.test(msg))) throw e;
+    console.log(`Send answered "${msg}": looking for ${txHash} on Sepolia`);
+  }
+  const attempts = opts.attempts ?? 40;
+  for (let i = 0; i < attempts; i++) {
+    await new Promise((r) => setTimeout(r, opts.pollMs ?? 3_000));
+    const receipt = await rpc<{ status: string; blockNumber: string } | null>("eth_getTransactionReceipt", [
+      txHash,
+    ]).catch(() => null);
+    if (receipt) return { txHash, receipt };
+  }
+  throw new Error(
+    `${txHash} is not mined after ${attempts} checks (if the send said "nonce too low", another transaction may have used the nonce): ${sepoliaTxUrl(txHash)}`,
+  );
 }

@@ -97,6 +97,31 @@ describe("requestMpcSignature", () => {
     );
   });
 
+  it("keeps polling after an HTTP 503 from the RPC", async () => {
+    const f = fake(
+      [
+        () => {
+          throw new Error("Server error 503");
+        },
+      ],
+      [() => ok(SIG)],
+    );
+    expect((await requestMpcSignature(f.account, { ...req, pollMs: 1 })).value).toEqual(SIG);
+  });
+
+  it("does not mistake a number containing 502/503/504 for a server error", async () => {
+    const f = fake(
+      [
+        () => {
+          throw new Error("InvalidTxError: InvalidNonce { tx_nonce: 15030, ak_nonce: 15031 }");
+        },
+      ],
+      [],
+    );
+    await expect(requestMpcSignature(f.account, { ...req, pollMs: 1 })).rejects.toThrow(/InvalidNonce/);
+    expect(f.polled).toHaveLength(0);
+  });
+
   it("does not poll when the send is rejected outright", async () => {
     const f = fake(
       [

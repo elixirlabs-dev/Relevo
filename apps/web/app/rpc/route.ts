@@ -1,9 +1,11 @@
 /**
  * /rpc: forwards read-only view calls on this app's escrow and receipt registry to the NEAR RPC, plus
- * get_policy on this app's DAO (to label attesters with their DAO role). Anything else (other contracts,
- * other DAO methods, transactions, sandbox_* state patches, other queries) is refused, so a public site
- * is not an open RPC proxy.
+ * get_policy on this app's DAO (to label attesters with their DAO role), plus public_key on the testnet
+ * MPC signer (the root key the Ethereum mirror check derives addresses from). Anything else (other
+ * contracts, other DAO or signer methods, transactions, sandbox_* state patches, other queries) is
+ * refused, so a public site is not an open RPC proxy.
  */
+import { TESTNET_MPC_SIGNER } from "@elivo/shared/evm-mirror";
 import { deployment, rpcUrl } from "../../lib/deployment.ts";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +26,8 @@ export async function POST(req: Request): Promise<Response> {
   const d = deployment();
   const readable = [d.escrow, ...(d.registry ? [d.registry] : [])];
   const daoPolicy = !!d.dao && body.params.account_id === d.dao && body.params.method_name === "get_policy";
-  if (!readable.includes(body.params.account_id as string) && !daoPolicy)
+  const mpcRoot = body.params.account_id === TESTNET_MPC_SIGNER && body.params.method_name === "public_key";
+  if (!readable.includes(body.params.account_id as string) && !daoPolicy && !mpcRoot)
     return Response.json({ error: "only this app's escrow and registry can be read" }, { status: 403 });
   const r = await fetch(target, {
     method: "POST",

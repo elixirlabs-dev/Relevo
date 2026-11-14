@@ -21,7 +21,7 @@ export interface MpcAccount {
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 /** Errors after which the transaction may still land: keep polling its status. */
 const MAYBE_SENT =
-  /timeout|TIMEOUT|429|too many requests|fetch failed|ECONNRESET|ETIMEDOUT|socket hang up|50[234]/i;
+  /timeout|\b429\b|too many requests|fetch failed|ECONNRESET|ETIMEDOUT|socket hang up|\b50[234]\b/i;
 
 export function nearTxHash(signed: SignedTransaction): string {
   return b58encode(new Uint8Array(createHash("sha256").update(signed.transaction.encode()).digest()));

@@ -117,6 +117,34 @@ describe("/rpc handler", () => {
     expect((await POST(req(call(TESTNET.registry, "get_attestations")))).status).toBe(200);
   });
 
+  it("reads the MPC signer's public_key (only), for the Ethereum mirror check", async () => {
+    delete process.env.ELIVO_DEPLOYMENT_JSON;
+    process.env.NEAR_RPC_URL = "http://127.0.0.1:3030";
+    const f = vi.fn(async () => Response.json({ result: { result: [] } }));
+    vi.stubGlobal("fetch", f);
+    const { POST } = await import("../app/rpc/route.ts");
+    const call = (account_id: string, method_name: string) => ({
+      ...view(account_id),
+      params: { ...view(account_id).params, method_name },
+    });
+    expect((await POST(req(call("v1.signer-prod.testnet", "public_key")))).status).toBe(200);
+    expect(f).toHaveBeenCalledOnce();
+    for (const body of [
+      call("v1.signer-prod.testnet", "sign"),
+      call("v1.signer-prod.testnet", "derived_public_key"),
+      call("v1.signer-prod.testnet", "state"),
+      call("v1.signer.testnet", "public_key"),
+      call("v1.signer-prod.near", "public_key"),
+      call("usdc.tether-token.near", "public_key"),
+      {
+        ...call("v1.signer-prod.testnet", "public_key"),
+        params: { ...call("v1.signer-prod.testnet", "public_key").params, request_type: "view_state" },
+      },
+    ])
+      expect((await POST(req(body))).status).toBe(403);
+    expect(f).toHaveBeenCalledOnce();
+  });
+
   it("refuses anything else without contacting the RPC", async () => {
     process.env.NEAR_RPC_URL = "http://127.0.0.1:3030";
     const f = vi.fn();

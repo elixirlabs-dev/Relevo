@@ -1,9 +1,10 @@
-import { bytesToHex, hexToBytes, parseTransaction, recoverTransactionAddress } from "viem";
+import { bytesToHex, hexToBytes, keccak256, parseTransaction, recoverTransactionAddress } from "viem";
 import { privateKeyToAccount, sign } from "viem/accounts";
 import { describe, expect, it } from "vitest";
 import { mirrorCalldata, parseMirrorCalldata } from "../../packages/shared/src/evm-mirror.ts";
 import {
   assembleSignedTx,
+  broadcastMirror,
   buildMirrorTx,
   mirrorGasLimit,
   mirrorSigningHash,
@@ -108,5 +109,78 @@ describe("mirror transaction", () => {
   it("signs a hash as 32 bytes of hex", () => {
     expect(mirrorSigningHash(tx())).toMatch(/^0x[0-9a-f]{64}$/);
     expect(bytesToHex(hexToBytes(mirrorSigningHash(tx())))).toHaveLength(66);
+  });
+});
+
+describe("broadcastMirror", () => {
+  const RAW = "0x02f86b0102030405" as const;
+  const HASH = keccak256(RAW);
+  const MINED = { status: "0x1", blockNumber: "0x10" };
+
+  /** A fake Sepolia RPC: `send` answers eth_sendRawTransaction, receipts answer the polls in order. */
+  function rpc(send: () => unknown, receipts: unknown[]) {
+    const calls: Array<{ method: string; params: unknown[] }> = [];
+    const f = async <T>(method: string, params: unknown[]): Promise<T> => {
+      calls.push({ method, params });
+      if (method === "eth_sendRawTransaction") return send() as T;
+      if (method === "eth_getTransactionReceipt") return (receipts.length ? receipts.shift() : null) as T;
+      throw new Error(method);
+    };
+    return { f, calls };
+  }
+  const polled = (calls: Array<{ method: string; params: unknown[] }>) =>
+    calls.filter((c) => c.method === "eth_getTransactionReceipt").map((c) => c.params[0]);
+
+  it("computes the hash locally and polls by it", async () => {
+    const r = rpc(() => HASH, [null, MINED]);
+    expect(await broadcastMirror(RAW, r.f, { pollMs: 1 })).toEqual({ txHash: HASH, receipt: MINED });
+    expect(polled(r.calls)).toEqual([HASH, HASH]);
+  });
+
+  it("treats a lost broadcast reply as possibly sent and polls by the local hash", async () => {
+    const r = rpc(() => {
+      throw new Error("eth_sendRawTransaction: fetch failed");
+    }, [MINED]);
+    expect((await broadcastMirror(RAW, r.f, { pollMs: 1 })).txHash).toBe(HASH);
+    expect(polled(r.calls)).toEqual([HASH]);
+  });
+
+  for (const msg of ["already known", "nonce too low"])
+    it(`treats "${msg}" as sent`, async () => {
+      const r = rpc(() => {
+        throw new Error(`eth_sendRawTransaction: ${msg}`);
+      }, [MINED]);
+      expect((await broadcastMirror(RAW, r.f, { pollMs: 1 })).txHash).toBe(HASH);
+    });
+
+  it("throws other send errors without polling", async () => {
+    const r = rpc(() => {
+      throw new Error("eth_sendRawTransaction: insufficient funds for gas * price + value");
+    }, [MINED]);
+    await expect(broadcastMirror(RAW, r.f, { pollMs: 1 })).rejects.toThrow(/insufficient funds/);
+    expect(polled(r.calls)).toEqual([]);
+  });
+
+  it("refuses a reply naming another hash", async () => {
+    const r = rpc(() => `0x${"00".repeat(32)}`, [MINED]);
+    await expect(broadcastMirror(RAW, r.f, { pollMs: 1 })).rejects.toThrow(/not the local hash/);
+  });
+
+  it("fails with the explorer link when the hash never shows up", async () => {
+    const r = rpc(() => HASH, []);
+    await expect(broadcastMirror(RAW, r.f, { pollMs: 1, attempts: 3 })).rejects.toThrow(
+      new RegExp(`${HASH} is not mined.*sepolia.etherscan.io/tx/${HASH}`),
+    );
+    expect(polled(r.calls)).toHaveLength(3);
+  });
+
+  it("keeps polling through RPC errors while waiting", async () => {
+    let n = 0;
+    const f = async <T>(method: string): Promise<T> => {
+      if (method === "eth_sendRawTransaction") return HASH as T;
+      if (++n === 1) throw new Error("eth_getTransactionReceipt: HTTP 503");
+      return MINED as T;
+    };
+    expect((await broadcastMirror(RAW, f, { pollMs: 1 })).receipt).toEqual(MINED);
   });
 });
