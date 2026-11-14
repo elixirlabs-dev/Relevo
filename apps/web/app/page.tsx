@@ -7,13 +7,14 @@ export default function Home() {
   return (
     <>
       <section className="sheet hero">
-        <span className="pill-label">Testnet · NEAR · Sputnik DAO</span>
-        <h1>Payouts a DAO can check.</h1>
+        <span className="pill-label">Testnet · NEAR · Sputnik DAO · Post-quantum receipts</span>
+        <h1>Payouts anyone can check.</h1>
         <p className="lede">
-          A testnet prototype for paying a DAO's contributors in Mexico. The DAO votes once and the USDC locks
-          in a NEAR escrow. Simulated payout firms with real testnet bonds deliver; a firm that misses its
-          cut-off is rerouted and its bond pays a penalty to the DAO. Every batch ends in a signed receipt
-          whose hash is anchored on-chain, so anyone can check what happened.
+          A testnet prototype for cross-border payouts you can prove. A DAO votes once and the USDC locks in a
+          NEAR escrow; simulated payout firms with real testnet bonds deliver to bank accounts in Mexico, and
+          a firm that misses its cut-off is rerouted while its bond pays a penalty. Any payer can also sign a
+          receipt for payouts made on any rail and anchor it on-chain, with a post-quantum signature beside
+          the usual one.
         </p>
         <p className="muted">
           This demo's funder is a DAO. The same receipt works for anyone who has to prove a payout arrived.
@@ -74,6 +75,44 @@ export default function Home() {
             <div className="caption">verify-receipt → OK</div>
           </Sticker>
         </div>
+      </section>
+
+      <section className="band">
+        <Eyebrow>Try it in 60 seconds</Eyebrow>
+        <h2>No sign-up. Only the first one needs a testnet wallet.</h2>
+        <ol className="steps-band">
+          <Sticker as="li" tone="mint">
+            <Eyebrow>Your wallet · any rail</Eyebrow>
+            <h3>Issue your own receipt</h3>
+            <p className="muted small">
+              Connect a testnet wallet, sign the sample payouts in your browser (ed25519 plus ML-DSA-65,
+              post-quantum) and anchor the receipt on NEAR. Then share it as a link.
+            </p>
+            <Button href="/issue">Issue a receipt →</Button>
+          </Sticker>
+          <Sticker as="li" tone="peach">
+            <Eyebrow>No wallet needed</Eyebrow>
+            <h3>Verify a receipt</h3>
+            <p className="muted small">
+              Your browser checks the signatures and the anchored hash against the chain. Edit one number in
+              the file and watch the check fail.
+            </p>
+            <Button href="/verify" variant="secondary">
+              Verify a receipt →
+            </Button>
+          </Sticker>
+          <Sticker as="li" tone="lavender">
+            <Eyebrow>Escrow · DAO vote</Eyebrow>
+            <h3>Watch an escrow batch</h3>
+            <p className="muted small">
+              Batch 5, read straight from the contract: a late firm rerouted, its bond penalised, a closed
+              account refunded in full.
+            </p>
+            <Button href="/chain/5" variant="secondary">
+              Watch batch 5 →
+            </Button>
+          </Sticker>
+        </ol>
       </section>
 
       <div className="tickets">
@@ -162,8 +201,8 @@ export default function Home() {
           </Sticker>
         </ol>
         <p className="muted small">
-          Built and tested today for the DAO case only. <a href="/verify">Verify a receipt</a> to see the
-          report.
+          The escrow is built and tested for the DAO case. Receipts for payouts made outside the escrow work
+          for any payer today: <a href="/issue">issue one</a>, then <a href="/verify">verify it</a>.
         </p>
       </section>
     </>

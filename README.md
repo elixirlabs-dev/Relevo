@@ -7,7 +7,18 @@
 > **Testnet prototype. Payout firms and SPEI receipts are simulated. Contract unaudited.**
 > Not a money transmitter and not a live service.
 
-**Live demo (read-only, NEAR testnet):** https://relevo-amber.vercel.app
+**Live demo (NEAR testnet):** https://relevo-amber.vercel.app
+
+**At a glance**
+
+| What | Try it |
+|---|---|
+| A DAO votes once; USDC locks in a NEAR escrow; bonded payout firms deliver; a late firm is rerouted and its bond pays a penalty; a closed account is refunded in full | [Batch 5 on-chain](https://relevo-amber.vercel.app/chain/5) |
+| Every payout ends in a signed receipt whose hash is anchored on-chain; your browser verifies it and exports a delivery report and CSV | [/verify](https://relevo-amber.vercel.app/verify) |
+| Receipts for payouts made **outside** the escrow, on any rail: issue one with your own testnet wallet (Meteor, Intear or Sender) | [/issue](https://relevo-amber.vercel.app/issue) |
+| **Post-quantum** receipt signatures: ML-DSA-65 (FIPS 204) beside ed25519, both checked against keys on-chain | [/issue](https://relevo-amber.vercel.app/issue) or the sample on [/verify](https://relevo-amber.vercel.app/verify) |
+| Share a verified receipt as a link: the receipt travels in the link's fragment and is checked when it opens | after any check on /verify or /issue |
+| Two Rust contracts (escrow, receipt registry), property-tested invariants, end-to-end tests on a local NEAR sandbox | [Run the tests](#run-the-tests) |
 
 A DAO votes once to pay a batch of contributors in Mexico. The USDC locks in a NEAR escrow, and bonded payout firms deliver. A late firm is rerouted automatically and its bond pays a penalty to the DAO. Every payout ends in a signed receipt, whose hash is anchored on-chain.
 

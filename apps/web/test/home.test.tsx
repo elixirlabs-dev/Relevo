@@ -37,3 +37,12 @@ it("on a read-only site, leads to the reference run and its receipt instead of a
     if (saved !== undefined) process.env.ROUTER_URL = saved;
   }
 });
+
+it("offers three things to try in a minute: issue a receipt, verify one, watch an escrow batch", () => {
+  const { getByRole, container } = render(<Home />);
+  expect(container.textContent).toContain("Try it in 60 seconds");
+  expect(getByRole("link", { name: "Issue a receipt →" }).getAttribute("href")).toBe("/issue");
+  expect(getByRole("link", { name: "Verify a receipt →" }).getAttribute("href")).toBe("/verify");
+  expect(getByRole("link", { name: "Watch batch 5 →" }).getAttribute("href")).toBe("/chain/5");
+  expect(container.textContent).toMatch(/post-quantum/i);
+});
