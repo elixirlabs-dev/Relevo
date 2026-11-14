@@ -291,6 +291,24 @@ Batch 5 locked 9,022.50 mUSDC for five payouts. These are its transactions on te
 | Refund | Payout 2 (1,500 mUSDC) returns to the DAO in full, with no penalty to anyone. | [ARVbCvHZ…](https://testnet.nearblocks.io/txns/ARVbCvHZGmukRtciDJyMTy18985pArnpJP2fCKf3Zke2) |
 | Anchor | The hash of the signed receipt is stored in the escrow. | [2qeoXKVn…](https://testnet.nearblocks.io/txns/2qeoXKVnS28WxkdEy5kaAb7CRbk5jRviq2Lq2BavWg3M) |
 
+### What it costs on testnet
+
+Measured from the transactions above (gas burnt across all receipts of each transaction; fees at the testnet gas price):
+
+| Operation | Gas | Fee | Storage paid |
+|---|---|---|---|
+| Fund a batch (the DAO's `act_proposal` executes, USDC moves to the escrow) | 15.0 Tgas | 0.0014 NEAR | none extra |
+| Assign a payout to a firm | 3.0 Tgas | 0.0003 NEAR | none |
+| Reroute a late payout, with the penalty to the DAO | 7.9 Tgas | 0.0007 NEAR | none |
+| Settle a payout (check the signed proof, release the funds) | 12.1 Tgas | 0.0011 NEAR | none |
+| Exclude a closed account (signed exclusion) | 3.2 Tgas | 0.0003 NEAR | none |
+| Refund a payout to the DAO | 7.0 Tgas | 0.0006 NEAR | none |
+| Anchor a batch receipt in the escrow | 2.9 Tgas | 0.0003 NEAR | none |
+| Registry: publish keys (with ML-DSA-65) and anchor a receipt, in one transaction | 6.0 Tgas | 0.0005 NEAR | 0.0229 NEAR |
+| Registry: anchor a receipt when the keys are already published | 3.0 Tgas | 0.0003 NEAR | 0.0014 NEAR |
+
+A payout delivered on time costs about 15 Tgas (0.0014 NEAR) in router calls. The registry refunds whatever storage deposit it doesn't use; the post-quantum key (1,952 bytes) is stored once per key version, not per receipt.
+
 Batches 0–3 were development runs; their open payouts were refunded to the DAO. Batch 2's anchored hash came from a receipt that changed after signing (a bug since fixed), so it does not verify. Batch 4 is a complete run from before the final review fixes, and batch 5 is the reference.
 
 ## Tracks entered and why
