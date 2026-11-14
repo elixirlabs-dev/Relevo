@@ -4,6 +4,7 @@ import type { WebConfig } from "../lib/config.ts";
 import { type DaoProposal, fetchDaoProposal } from "../lib/dao.ts";
 import { demoSigner, type Signer, walletSigner } from "../lib/signer.ts";
 import { ProposeView } from "./ProposeView.tsx";
+import { Button } from "./ui.tsx";
 
 /** Loads the signer (wallet or demo) and polls the DAO proposal until the batch is funded. */
 export function DaoVote({
@@ -27,6 +28,7 @@ export function DaoVote({
   const [council, setCouncil] = useState<string[]>([]);
   const [tick, setTick] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [walletError, setWalletError] = useState<string | null>(null);
   const [unknownDraft, setUnknownDraft] = useState(false);
   const [stalled, setStalled] = useState(false);
   /** When this page first saw the proposal Approved (the escrow should record the batch soon after). */
@@ -86,13 +88,27 @@ export function DaoVote({
   return (
     <>
       {signer.mode === "wallet" && !signer.accountId && !funded && (
-        <p>
-          {wallets.map((w) => (
-            <button key={w.id} type="button" className="secondary" onClick={() => signer.signIn(w.id)}>
-              {`Connect ${w.name}`}
-            </button>
-          ))}
-        </p>
+        <div className="stack" style={{ gap: 6 }}>
+          <div className="row">
+            {wallets.map((w) => (
+              <Button
+                key={w.id}
+                variant="secondary"
+                onClick={() => {
+                  setWalletError(null);
+                  signer
+                    .signIn(w.id)
+                    .catch((e) =>
+                      setWalletError(`${w.name}: ${(e as Error).message || "could not connect"}`),
+                    );
+                }}
+              >
+                {`Connect ${w.name}`}
+              </Button>
+            ))}
+          </div>
+          {walletError && <p className="bad">{walletError}</p>}
+        </div>
       )}
       <ProposeView
         draftId={draftId}

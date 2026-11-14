@@ -71,7 +71,7 @@ Production needs:
 ### 5. Web app
 
 - **Accounts and roles:** operator sign-in, and a separate view for the DAO, firms and auditors.
-- **Wallets:** more than MyNearWallet (for example HOT, Ledger and MPC wallets), tested end to end on mainnet.
+- **Wallets:** beyond MyNearWallet, Intear and Sender (for example Meteor, HOT, Ledger and MPC wallets), tested end to end on mainnet.
 - **Product polish:** Spanish and English, an accessibility audit, mobile layouts, and clear error states. Several small error states are listed under "Improvements" below.
 - **Dev tooling:** `pnpm dev` runs Next's webpack dev server, because Turbopack's dev watcher reloads pages in a loop in this workspace layout. Revisit this when Turbopack supports nested workspace apps better.
 

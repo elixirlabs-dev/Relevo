@@ -104,7 +104,7 @@ The public key always comes from the chain (`--chain`) or from you (`--pubkey`),
 2. **Quote**: payees with the last 4 digits only, payouts, the 25 bps fee buffer, the total to lock, the fixed rate and the deadlines. Below that is a live 1Click pay-in quote (ETH, BTC, SOL or Base USDC). It is a mainnet price for illustration; 1Click's own app fee is shown.
 3. **Propose & vote** (`/batches/<id>`): create the Sputnik DAO proposal, then approve it as the council.
    - On the sandbox, a **demo signer** labelled "Demo signer: local sandbox keys, not a wallet" signs with the local council key. It only signs this app's funding proposal.
-   - On testnet (`pnpm dev:testnet`), the DAO steps are signed with MyNearWallet: anyone can create the proposal, and only a council member can approve it. Like `make demo-testnet`, this runs the router with the deployer's keys, so only whoever created the deployment can run it. It changes nothing on-chain at start-up. Without those keys, use `pnpm web:testnet` (read-only).
+   - On testnet (`pnpm dev:testnet`), the DAO steps are signed with a wallet: MyNearWallet, Intear Wallet or the Sender extension. Anyone can create the proposal, and only a council member can approve it. Like `make demo-testnet`, this runs the router with the deployer's keys, so only whoever created the deployment can run it. It changes nothing on-chain at start-up. Without those keys, use `pnpm web:testnet` (read-only).
 4. **Live status**: each payout's state, route (e.g. MX-3 → MX-2), the penalty paid to the DAO, the proof reference and tx links. When the batch completes it shows the anchored receipt hash, a receipt download and the `verify-receipt` command.
 
 5. **Verify** (`/verify`): upload or paste a receipt, or on testnet load the reference receipt for batch 5. Your browser runs four checks and shows the result of each:
@@ -292,7 +292,7 @@ What stands between this prototype and production, what to improve next, and whe
 - A custodian-held second release key.
 - Sealed commit-reveal quotes; the full set of exclusion reason codes (bank outage, rejection, wrong details).
 - Pay-in through 1Click for real (today the app shows a dry quote only).
-- More wallets in the web app (MyNearWallet only today).
+- More wallets in the web app: Meteor, HOT, Ledger and MPC wallets (MyNearWallet, Intear and Sender today; Meteor's selector module still needs near-api-js 6).
 - An audit before any real funds.
 
 Further out:
