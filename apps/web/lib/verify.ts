@@ -156,15 +156,17 @@ export async function verifyAgainstChain(
   return done(hash);
 }
 
-interface RegistryAnchor {
+export interface RegistryAnchor {
   receipt_hash: string;
   receipt_pk: string;
   mldsa65_pk: string | null;
   key_version: number;
+  /** Block time of the anchor, nanoseconds since the epoch (a JSON U64 string). */
+  anchored_at_ns?: string;
 }
 
-/** A document anchored in the receipt registry: a direct receipt or a check report. */
-interface RegistryDocument {
+/** A document anchored in the receipt registry: a direct receipt, a check report, a payee proof's header. */
+export interface RegistryDocument {
   network: string;
   registry: string;
   issuer: string;
@@ -175,18 +177,28 @@ interface RegistryDocument {
  * The registry, signature and anchor checks shared by direct receipts and check reports: the registry
  * and network from this app's config, the issuer's keys and the anchored hash from the registry's
  * get_receipt (keyed by the issuer account and the document's id). Then `totals` adds the last check.
+ * A document whose signed bytes or anchored hash differ from v1's brings its own `hash` and
+ * `signatures` (both default to the v1 ones). `anchor` is what the registry returned, if anything.
  */
-async function verifyRegistryDocument(
-  r: RegistryDocument,
-  doc: { id: string; noun: string; totals: () => Check },
+export async function verifyRegistryDocument<T extends RegistryDocument>(
+  r: T,
+  doc: {
+    id: string;
+    noun: string;
+    totals: () => Check;
+    hash?: (r: T) => Promise<string>;
+    signatures?: (r: T, keys: RegistryAnchor) => Promise<VerifyResult>;
+  },
   app: { network: string; registry?: string | null },
   view: View,
-): Promise<{ checks: Check[]; hash: string | null; ok: boolean }> {
+): Promise<{ checks: Check[]; hash: string | null; ok: boolean; anchor: RegistryAnchor | null }> {
   const checks: Check[] = [];
+  let anchor: RegistryAnchor | null = null;
   const done = (hash: string | null) => ({
     checks,
     hash,
     ok: checks.length === 4 && checks.every((c) => c.ok),
+    anchor,
   });
   const registry = app.registry ?? null;
   const same = !!registry && r.registry === registry && r.network === app.network;
@@ -201,7 +213,6 @@ async function verifyRegistryDocument(
   });
   if (!same || !registry) return done(null);
 
-  let anchor: RegistryAnchor | null;
   try {
     anchor = await view(registry, "get_receipt", { issuer: r.issuer, receipt_id: doc.id });
   } catch (e) {
@@ -217,7 +228,7 @@ async function verifyRegistryDocument(
     return done(null);
   }
 
-  const v = await verifyDirectSignaturesWeb(r, anchor);
+  const v = await (doc.signatures ?? verifyDirectSignaturesWeb)(r, anchor);
   const filePk = r.signatures.find((s) => s?.alg === "ed25519")?.public_key ?? "no key";
   checks.push({
     id: "signature",
@@ -233,7 +244,7 @@ async function verifyRegistryDocument(
           ),
   });
 
-  const hash = await directHashB58Web(r);
+  const hash = await (doc.hash ?? directHashB58Web)(r);
   checks.push(
     anchor.receipt_hash === hash
       ? { id: "anchor", ok: true, detail: `Hash ${hash} matches the hash ${r.issuer} anchored on-chain` }
@@ -253,7 +264,7 @@ async function verifyDirect(
   app: { network: string; registry?: string | null },
   view: View,
 ): Promise<VerifyOutcome> {
-  const out = await verifyRegistryDocument(
+  const { anchor: _anchor, ...out } = await verifyRegistryDocument(
     r,
     {
       id: r.receipt_id,
@@ -282,7 +293,7 @@ async function verifyCheckReport(
   app: { network: string; registry?: string | null },
   view: View,
 ): Promise<VerifyOutcome> {
-  const out = await verifyRegistryDocument(
+  const { anchor: _anchor, ...out } = await verifyRegistryDocument(
     r,
     {
       id: r.report_id,
