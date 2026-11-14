@@ -36,6 +36,9 @@ export interface VerifyOutcome {
 
 type View = <T>(contractId: string, method: string, args?: object) => Promise<T>;
 
+/** The format check's message for a file that is none of the documents /verify accepts. */
+export const NOT_A_RECEIPT = "Not an elivo-receipt-1, elivo-direct-receipt-1 or elivo-check-report-1 file";
+
 function parse(input: string): Receipt | null {
   try {
     const r = JSON.parse(input) as Receipt;
@@ -80,7 +83,7 @@ export async function verifyAgainstChain(
     return {
       receipt: null,
       direct: null,
-      checks: [{ id: "format", ok: false, detail: "Not an elivo-receipt-1 or elivo-direct-receipt-1 file" }],
+      checks: [{ id: "format", ok: false, detail: NOT_A_RECEIPT }],
       ok: false,
       hash: null,
     };

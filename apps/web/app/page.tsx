@@ -85,8 +85,9 @@ export default function Home() {
             <Eyebrow>Before paying · any rail</Eyebrow>
             <h3>Check a batch</h3>
             <p className="muted small">
-              Load a sample batch with problems and see each one caught in your browser: a CLABE typo, a
-              duplicate account, an unusual amount, a changed account. Then anchor the check report on NEAR.
+              Load the sample with problems to see what gets blocked or flagged in your browser: a CLABE typo,
+              a duplicate account, an unusual amount, a changed account. Or load the clean sample to anchor a
+              check on NEAR.
             </p>
             <Button href="/check">Check a batch →</Button>
           </Sticker>

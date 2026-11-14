@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { CheckView } from "../components/CheckView.tsx";
-import { lastAnchoredCheck, PENDING_CHECK_KEY } from "../lib/check.ts";
+import { lastAnchoredCheck, PENDING_CHECK_KEY, pendingHistoryKey } from "../lib/check.ts";
 import type { WalletPort } from "../lib/signer.ts";
 import type { TxSpec } from "../lib/txs.ts";
 
@@ -111,6 +111,11 @@ describe("CheckView", () => {
     fireEvent.click(screen.getByRole("button", { name: "Download check report (JSON)" }));
     expect(saved).toEqual([`${last?.report_id}.json`]);
     expect(sessionStorage.getItem(PENDING_CHECK_KEY)).toBeNull();
+    // Anchored once: the button can't send the same report again.
+    expect(anchorButton().disabled).toBe(true);
+    fireEvent.click(anchorButton());
+    expect(c.sent).toHaveLength(1);
+    expect(screen.getByText("Anchored and verified against the chain")).toBeTruthy();
   });
 
   it("asks for a wallet before it can anchor", async () => {
@@ -146,6 +151,9 @@ describe("CheckView", () => {
     fireEvent.click(anchorButton());
     await screen.findByText("page reloaded");
     expect(sessionStorage.getItem(PENDING_CHECK_KEY)).not.toBeNull();
+    // Names and full accounts wait in localStorage next to the history, never in the pending entry.
+    expect(sessionStorage.getItem(PENDING_CHECK_KEY)).not.toContain("002010077777777771");
+    expect(localStorage.getItem(pendingHistoryKey("alice.testnet"))).toContain("002010077777777771");
     first.unmount();
     render(
       <CheckView
@@ -157,6 +165,7 @@ describe("CheckView", () => {
     );
     expect(await screen.findByText("Anchored and verified against the chain")).toBeTruthy();
     expect(sessionStorage.getItem(PENDING_CHECK_KEY)).toBeNull();
+    expect(localStorage.getItem(pendingHistoryKey("alice.testnet"))).toBeNull();
     expect(lastAnchoredCheck("alice.testnet", localStorage)).not.toBeNull();
   });
 });

@@ -3,9 +3,12 @@ import { verifyDirectSignaturesWeb } from "@elivo/shared/direct-verify-web";
 import { describe, expect, it } from "vitest";
 import {
   acceptHistory,
+  clearPendingHistory,
+  commitPendingHistory,
   historyKey,
   lastAnchoredCheck,
   PENDING_CHECK_KEY,
+  pendingHistoryKey,
   prepareCheckAnchor,
   readHistory,
   readPendingCheck,
@@ -13,6 +16,7 @@ import {
   runCheck,
   SAMPLE_PLANNED_CSV,
   SAMPLE_PROBLEMS_CSV,
+  savePendingHistory,
 } from "../lib/check.ts";
 import { issuerKeys } from "../lib/issue.ts";
 
@@ -187,10 +191,23 @@ describe("anchored checks", () => {
     );
     if (!p.ok) throw new Error(p.errors.join());
     expect(readPendingCheck(s)).toBeNull();
-    s.setItem(PENDING_CHECK_KEY, JSON.stringify({ report: p.report, accept: { a: "b" } }));
+    s.setItem(PENDING_CHECK_KEY, JSON.stringify({ report: p.report }));
     expect(readPendingCheck(s)?.report.report_id).toBe(p.report.report_id);
-    expect(readPendingCheck(s)?.accept).toEqual({ a: "b" });
     s.setItem(PENDING_CHECK_KEY, "{not json");
     expect(readPendingCheck(s)).toBeNull();
+  });
+
+  it("keeps the accounts to record next to the history, and records them only when committed", () => {
+    const s = memoryStorage();
+    savePendingHistory(account, { "ana prueba": "002010077777777771" }, s);
+    expect(pendingHistoryKey(account)).toBe("elivo-check-history-pending:alice.testnet");
+    expect(readHistory(account, s)).toEqual({});
+    commitPendingHistory(account, s);
+    expect(readHistory(account, s)).toEqual({ "ana prueba": "002010077777777771" });
+    expect(s.getItem(pendingHistoryKey(account))).toBeNull();
+    savePendingHistory(account, { "ana prueba": "012180001234567899" }, s);
+    clearPendingHistory(account, s);
+    commitPendingHistory(account, s);
+    expect(readHistory(account, s)["ana prueba"]).toBe("002010077777777771");
   });
 });

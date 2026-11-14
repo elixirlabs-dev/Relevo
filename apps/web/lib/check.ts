@@ -228,9 +228,31 @@ export function recordAnchoredCheck(
   writeJson(storage, lastKey(account), last);
 }
 
-/** The report waiting for its anchor transaction, with the history to record once it is anchored. */
-export function readPendingCheck(storage: Storage | null): { report: CheckReport; accept: History } | null {
-  const v = readJson(storage, PENDING_CHECK_KEY) as { report?: unknown; accept?: unknown } | null;
+/** The report waiting for its anchor transaction. */
+export function readPendingCheck(storage: Storage | null): { report: CheckReport } | null {
+  const v = readJson(storage, PENDING_CHECK_KEY) as { report?: unknown } | null;
   if (!v || typeof v !== "object" || !isCheckReport(v.report)) return null;
-  return { report: v.report, accept: isStringMap(v.accept) ? v.accept : {} };
+  return { report: v.report };
+}
+
+/** Where the accounts to record wait until their check is anchored: next to the history, in localStorage. */
+export function pendingHistoryKey(account: string): string {
+  return `elivo-check-history-pending:${account}`;
+}
+
+export function savePendingHistory(account: string, accept: History, storage: Storage | null) {
+  writeJson(storage, pendingHistoryKey(account), accept);
+}
+
+export function clearPendingHistory(account: string, storage: Storage | null) {
+  try {
+    storage?.removeItem(pendingHistoryKey(account));
+  } catch {}
+}
+
+/** The check is anchored: record its accounts as the ones used last time, and drop the pending entry. */
+export function commitPendingHistory(account: string, storage: Storage | null) {
+  const accept = readJson(storage, pendingHistoryKey(account));
+  if (isStringMap(accept)) acceptHistory(account, accept, storage);
+  clearPendingHistory(account, storage);
 }

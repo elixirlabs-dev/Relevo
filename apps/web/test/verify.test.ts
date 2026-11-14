@@ -79,7 +79,11 @@ describe("verifyAgainstChain", () => {
       const r = await verifyAgainstChain(input, app, c.view);
       expect(r).toMatchObject({ ok: false, receipt: null, hash: null });
       expect(r.checks).toEqual([
-        { id: "format", ok: false, detail: "Not an elivo-receipt-1 or elivo-direct-receipt-1 file" },
+        {
+          id: "format",
+          ok: false,
+          detail: "Not an elivo-receipt-1, elivo-direct-receipt-1 or elivo-check-report-1 file",
+        },
       ]);
       expect(c.calls).toHaveLength(0);
     }
@@ -89,7 +93,11 @@ describe("verifyAgainstChain", () => {
     const c = chain();
     const r = await verifyAgainstChain(files["unsigned.json"], app, c.view);
     expect(r.checks).toEqual([
-      { id: "format", ok: false, detail: "Not an elivo-receipt-1 or elivo-direct-receipt-1 file" },
+      {
+        id: "format",
+        ok: false,
+        detail: "Not an elivo-receipt-1, elivo-direct-receipt-1 or elivo-check-report-1 file",
+      },
     ]);
     expect(c.calls).toHaveLength(0);
   });

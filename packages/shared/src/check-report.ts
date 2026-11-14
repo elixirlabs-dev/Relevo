@@ -148,6 +148,7 @@ function isRow(v: unknown): v is CheckReportRow {
     typeof x.payee_ref === "string" &&
     /^[0-9a-f]{64}$/.test(x.payee_ref) &&
     typeof x.account_last4 === "string" &&
+    /^[A-Za-z0-9]{4}$/.test(x.account_last4) &&
     (x.bank === null || typeof x.bank === "string") &&
     typeof x.amount === "string" &&
     AMOUNT_2DP.test(x.amount) &&

@@ -3,8 +3,9 @@ import type { CheckReport } from "@elivo/shared/check-report";
 import { LABEL } from "@elivo/shared/label";
 import { useEffect, useRef, useState } from "react";
 import {
-  acceptHistory,
   type Checked,
+  clearPendingHistory,
+  commitPendingHistory,
   FINDING_WORDS,
   PENDING_CHECK_KEY,
   prepareCheckAnchor,
@@ -13,6 +14,7 @@ import {
   runCheck,
   SAMPLE_PLANNED_CSV,
   SAMPLE_PROBLEMS_CSV,
+  savePendingHistory,
 } from "../lib/check.ts";
 import type { WebConfig } from "../lib/config.ts";
 import { viewCall } from "../lib/rpc.ts";
@@ -39,7 +41,7 @@ const CHECK_NAME: Record<CheckId, string> = {
 
 type View = <T>(contractId: string, method: string, args?: object) => Promise<T>;
 type Wallets = ReadonlyArray<{ id: string; name: string }>;
-type Pending = { report: CheckReport; accept: Record<string, string> };
+type Pending = { report: CheckReport };
 
 const session = (): Storage | null => {
   try {
@@ -116,7 +118,7 @@ export function CheckView({
         { report_id: r.report_id, hash: o.hash, checked_at: r.checked_at },
         local(),
       );
-      acceptHistory(r.issuer, p.accept, local());
+      commitPendingHistory(r.issuer, local());
       try {
         session()?.removeItem(PENDING_CHECK_KEY);
       } catch {}
@@ -148,6 +150,7 @@ export function CheckView({
       const cancelled = new URLSearchParams(window.location.search).has("errorCode");
       if (cancelled || left.report.issuer !== acct) {
         session()?.removeItem(PENDING_CHECK_KEY);
+        clearPendingHistory(left.report.issuer, local());
         if (cancelled) setErrors(["The wallet transaction was cancelled; nothing was anchored."]);
         return;
       }
@@ -215,7 +218,8 @@ export function CheckView({
         setBusy(null);
         return;
       }
-      const p = { report: prepared.report, accept: checked.accept };
+      const p = { report: prepared.report };
+      savePendingHistory(account, checked.accept, local());
       try {
         session()?.setItem(PENDING_CHECK_KEY, JSON.stringify(p));
       } catch {}
@@ -368,7 +372,11 @@ export function CheckView({
                     </div>
                   )}
                   <div className="row">
-                    <Button variant="dark" disabled={!res.ok || !account || !!busy} onClick={anchor}>
+                    <Button
+                      variant="dark"
+                      disabled={!res.ok || !account || !!busy || !!report}
+                      onClick={anchor}
+                    >
                       Anchor this check on NEAR
                     </Button>
                     <label className="tag">
@@ -381,11 +389,13 @@ export function CheckView({
                     </label>
                   </div>
                   <p className="muted small" style={{ marginTop: 8 }}>
-                    {!res.ok
-                      ? "Anchoring is off while any row is blocked."
-                      : !account
-                        ? "Connect a testnet wallet to anchor."
-                        : `Your browser signs a check report with the receipt keys kept in this browser (the same keys /issue uses). Your wallet then sends one transaction to ${cfg.registry}: it publishes your receipt keys if they are new, and anchors the report's hash. The report keeps the findings, a salted hash and the last 4 digits of each account, never a name. You attach up to 0.06 testnet NEAR for storage; the registry refunds what it doesn't use.`}
+                    {report
+                      ? "This check is anchored. Change the batch and check it again to anchor a new report."
+                      : !res.ok
+                        ? "Anchoring is off while any row is blocked."
+                        : !account
+                          ? "Connect a testnet wallet to anchor."
+                          : `Your browser signs a check report with the receipt keys kept in this browser (the same keys /issue uses). Your wallet then sends one transaction to ${cfg.registry}: it publishes your receipt keys if they are new, and anchors the report's hash. The report keeps the findings, a salted hash and the last 4 digits of each account, never a name. You attach up to 0.06 testnet NEAR for storage; the registry refunds what it doesn't use.`}
                   </p>
                 </>
               )}
