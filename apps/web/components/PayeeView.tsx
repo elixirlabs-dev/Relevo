@@ -27,7 +27,18 @@ const local = (): Storage | null => {
   }
 };
 
+/**
+ * True only when the registry, signature and anchor checks all ran and passed. Until then the Merkle
+ * path proves nothing: anyone can build a self-consistent header with their own payouts_root.
+ */
+const chainVerified = (o: PayeeOutcome) =>
+  (["registry", "signature", "anchor"] as const).every((id) => o.checks.some((c) => c.id === id && c.ok));
+
+/** A passing Merkle path under an unverified receipt is "not checked", never ✓. */
+const merkleUnchecked = (c: PayeeCheck, o: PayeeOutcome) => c.id === "merkle" && c.ok && !chainVerified(o);
+
 function checkLine(c: PayeeCheck, p: PayeeProof, o: PayeeOutcome, t: PayeeText, lang: Lang): string {
+  if (merkleUnchecked(c, o)) return t.merkleUnchecked;
   const words =
     c.id === "registry"
       ? c.ok
@@ -191,8 +202,9 @@ export function PayeeView({ app, view, fragment }: PayeeViewProps) {
             </div>
             <dl className="facts">
               <dt>{t.status}</dt>
-              <dd className={pay.status === "Paid" ? "ok" : "bad"}>
-                {`${pay.status === "Paid" ? "✓" : "✗"} ${t.statusWord[pay.status as keyof PayeeText["statusWord"]] ?? pay.status}`}
+              {/* Only a verified receipt earns a mark or a colour: a forged link must not read as paid. */}
+              <dd className={outcome?.ok ? (pay.status === "Paid" ? "ok" : "bad") : undefined}>
+                {`${outcome?.ok ? (pay.status === "Paid" ? "✓ " : "✗ ") : ""}${t.statusWord[pay.status as keyof PayeeText["statusWord"]] ?? pay.status}`}
               </dd>
               <dt>{t.paidAt}</dt>
               <dd>{pay.paid_at ? formatWhen(pay.paid_at, lang) : "—"}</dd>
@@ -217,7 +229,11 @@ export function PayeeView({ app, view, fragment }: PayeeViewProps) {
                 </h2>
                 <ul className="stack" style={{ listStyle: "none", padding: 0, margin: 0, gap: 6 }}>
                   {shownChecks.map((c) => (
-                    <li key={c.id} className={c.ok ? "" : "bad"} style={{ wordBreak: "break-word" }}>
+                    <li
+                      key={c.id}
+                      className={c.ok ? (merkleUnchecked(c, outcome) ? "muted" : "") : "bad"}
+                      style={{ wordBreak: "break-word" }}
+                    >
                       {checkLine(c, proof, outcome, t, lang)}
                     </li>
                   ))}
@@ -226,7 +242,11 @@ export function PayeeView({ app, view, fragment }: PayeeViewProps) {
                   <summary className="small muted">{t.details}</summary>
                   <ul className="small muted" lang="en" style={{ wordBreak: "break-word" }}>
                     {outcome.checks.map((c) => (
-                      <li key={c.id}>{`${c.ok ? "✓" : "✗"} ${c.detail}`}</li>
+                      <li key={c.id}>
+                        {merkleUnchecked(c, outcome)
+                          ? "not checked · the receipt header is not verified against the chain, so its payouts root proves nothing"
+                          : `${c.ok ? "pass" : "fail"} · ${c.detail}`}
+                      </li>
                     ))}
                   </ul>
                 </details>

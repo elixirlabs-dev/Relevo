@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
-import { directV2HashB58, type PayeeProof } from "@elivo/shared/direct-receipt-v2";
+import { directV2HashB58, type PayeeProof, verifyPayeeProofStructure } from "@elivo/shared/direct-receipt-v2";
+import { merkleLeaf, merkleNode } from "@elivo/shared/merkle";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PayeeView } from "../components/PayeeView.tsx";
@@ -77,6 +78,30 @@ describe("PayeeView", () => {
     ).toBeTruthy();
     expect(screen.getByText(`✓ Signed by ${H.issuer}'s key on NEAR`)).toBeTruthy();
     expect(screen.getByText("✗ Not verified")).toBeTruthy();
+  });
+
+  it("shows no ✓ anywhere for a forged header whose payouts_root matches its own payout", async () => {
+    // A forger raises the amount and recomputes the root, so the Merkle path is self-consistent; the
+    // header no longer matches the issuer's signature or the anchored hash.
+    const payout = { ...PROOF.payout, amount: "185000.00" };
+    const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+    const bytes = (h: string) => Uint8Array.from(h.match(/../g) ?? [], (x) => Number.parseInt(x, 16));
+    const root = hex(merkleNode(bytes(PROOF.proof.siblings[0].hash), merkleLeaf(payout)));
+    const forged: PayeeProof = { ...PROOF, header: { ...H, payouts_root: root }, payout };
+    expect(verifyPayeeProofStructure(forged)).toEqual([]);
+
+    render(<PayeeView app={app} view={view} fragment={await fragmentOf(forged)} />);
+    expect(await screen.findByText("✗ Not verified")).toBeTruthy();
+    expect(screen.getByText("— Not checked: the receipt itself isn't verified")).toBeTruthy();
+    expect(screen.getByText(`✗ Not signed by ${H.issuer}'s key on NEAR`)).toBeTruthy();
+    expect(screen.getByText("Paid")).toBeTruthy();
+    expect(document.body.textContent).not.toContain("✓");
+    expect(document.querySelector(".ok")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "ES" }));
+    expect(screen.getByText("— No se revisó: el recibo en sí no está verificado")).toBeTruthy();
+    expect(screen.getByText("Pagado")).toBeTruthy();
+    expect(document.body.textContent).not.toContain("✓");
   });
 
   it("confirms the payee's own CLABE locally, and rejects another, without sending it anywhere", async () => {

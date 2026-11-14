@@ -38,6 +38,8 @@ export interface PayeeText {
   anchorBad: string;
   merkleOk: (n: number) => string;
   merkleBad: string;
+  /** The whole line, mark included: a Merkle path under an unverified receipt proves nothing. */
+  merkleUnchecked: string;
   registryOk: string;
   registryBad: string;
   details: string;
@@ -87,6 +89,7 @@ export const PAYEE_TEXT: Record<Lang, PayeeText> = {
     anchorBad: "Not anchored on NEAR as this link says",
     merkleOk: (n) => `Your payout is one of ${n} in this receipt`,
     merkleBad: "Your payout doesn't match this receipt: the link was changed",
+    merkleUnchecked: "— Not checked: the receipt itself isn't verified",
     registryOk: "From the receipt registry this app checks",
     registryBad: "This link is for another receipt registry or network than the one this app checks",
     details: "Technical details",
@@ -136,6 +139,7 @@ export const PAYEE_TEXT: Record<Lang, PayeeText> = {
     anchorBad: "No está registrado en NEAR como dice este enlace",
     merkleOk: (n) => `Tu pago es uno de los ${n} de este recibo`,
     merkleBad: "Tu pago no coincide con este recibo: alguien modificó el enlace",
+    merkleUnchecked: "— No se revisó: el recibo en sí no está verificado",
     registryOk: "Del registro de recibos que revisa esta app",
     registryBad: "Este enlace es de otro registro de recibos o de otra red, no del que revisa esta app",
     details: "Detalles técnicos",
