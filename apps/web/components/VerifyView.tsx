@@ -5,6 +5,7 @@ import { directReceiptToCsv, receiptToCsv } from "@elivo/shared/receipt-csv";
 import { useEffect, useRef, useState } from "react";
 import { decodeShare } from "../lib/share.ts";
 import { type CheckId, type VerifyOutcome, verifyAgainstChain } from "../lib/verify.ts";
+import { Attestations, type AttestationsProps } from "./Attestations.tsx";
 import { CheckReportSheet } from "./CheckReport.tsx";
 import { DeliveryReport } from "./DeliveryReport.tsx";
 import { DirectReport } from "./DirectReport.tsx";
@@ -32,8 +33,8 @@ function saveFile(name: string, text: string) {
 }
 
 export interface VerifyViewProps {
-  /** Escrow, registry and network from this app's config: what a receipt must belong to. */
-  app: { escrow: string; network: "sandbox" | "testnet"; registry?: string | null };
+  /** Escrow, registry and network from this app's config: what a receipt must belong to. The DAO labels attesters. */
+  app: { escrow: string; network: "sandbox" | "testnet"; registry?: string | null; dao?: string | null };
   /** Injectable for tests. */
   verify?: (input: string) => Promise<VerifyOutcome>;
   save?: (name: string, text: string) => void;
@@ -41,9 +42,11 @@ export interface VerifyViewProps {
   /** A `#r=` share fragment to check on load (default: this page's own URL fragment). */
   fragment?: string;
   copy?: (s: string) => Promise<void>;
+  /** Injectable for tests: the attestations panel's chain reads, wallet and retry delay. */
+  attest?: Pick<AttestationsProps, "view" | "wallet" | "retryMs">;
 }
 
-export function VerifyView({ app, verify, save = saveFile, print, fragment, copy }: VerifyViewProps) {
+export function VerifyView({ app, verify, save = saveFile, print, fragment, copy, attest }: VerifyViewProps) {
   const [text, setText] = useState("");
   const [outcome, setOutcome] = useState<VerifyOutcome | null>(null);
   const [busy, setBusy] = useState(false);
@@ -101,6 +104,12 @@ export function VerifyView({ app, verify, save = saveFile, print, fragment, copy
   const d = outcome?.direct ?? outcome?.directV2;
   const c = outcome?.check;
   const status = !outcome ? "idle" : outcome.ok ? "done" : "offline";
+  /** A registry-anchored document that verified can be attested (escrow batch receipts are not in the registry). */
+  const anchored = d
+    ? { issuer: d.issuer, id: d.receipt_id }
+    : c
+      ? { issuer: c.issuer, id: c.report_id }
+      : null;
   return (
     <div className="stack">
       <Window title="~/verify" status={status}>
@@ -234,6 +243,19 @@ export function VerifyView({ app, verify, save = saveFile, print, fragment, copy
           <ShareLink text={text} copy={copy} />
           <CheckReportSheet report={c} hash={outcome.hash} print={print} />
         </div>
+      )}
+
+      {outcome?.ok && outcome.hash && anchored && app.registry && (
+        <Attestations
+          key={`${anchored.issuer}/${anchored.id}/${outcome.hash}`}
+          registry={app.registry}
+          dao={app.dao ?? null}
+          issuer={anchored.issuer}
+          receiptId={anchored.id}
+          hash={outcome.hash}
+          network={app.network}
+          {...attest}
+        />
       )}
     </div>
   );

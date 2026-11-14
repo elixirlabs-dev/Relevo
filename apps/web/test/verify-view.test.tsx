@@ -1,9 +1,16 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildVectors } from "../../../scripts/lib/receipt-vectors.ts";
 import { VerifyView } from "../components/VerifyView.tsx";
 import type { VerifyOutcome } from "../lib/verify.ts";
 
+// A verified registry receipt mounts the attestations panel, which reads /rpc: answer it offline.
+beforeEach(() => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response("", { status: 404 })),
+  );
+});
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();

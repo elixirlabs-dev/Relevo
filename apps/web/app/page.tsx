@@ -107,7 +107,7 @@ export default function Home() {
             <h3>Verify a receipt</h3>
             <p className="muted small">
               Your browser checks the signatures and the anchored hash against the chain. Edit one number in
-              the file and watch the check fail.
+              the file and watch the check fail. With a wallet, attest that you checked it.
             </p>
             <Button href="/verify" variant="secondary">
               Verify a receipt →

@@ -89,6 +89,34 @@ describe("/rpc handler", () => {
     expect((await POST(req(view("usdc.tether-token.near")))).status).toBe(403);
   });
 
+  it("reads the DAO's policy (get_policy only), for the attesters' DAO roles", async () => {
+    delete process.env.ELIVO_DEPLOYMENT_JSON;
+    process.env.NEAR_RPC_URL = "http://127.0.0.1:3030";
+    const f = vi.fn(async () => Response.json({ result: { result: [] } }));
+    vi.stubGlobal("fetch", f);
+    const { POST } = await import("../app/rpc/route.ts");
+    const call = (account_id: string, method_name: string) => ({
+      ...view(account_id),
+      params: { ...view(account_id).params, method_name },
+    });
+    expect((await POST(req(call(TESTNET.dao, "get_policy")))).status).toBe(200);
+    expect(f).toHaveBeenCalledOnce();
+    for (const body of [
+      call(TESTNET.dao, "get_proposals"),
+      call(TESTNET.dao, "get_config"),
+      {
+        ...call(TESTNET.dao, "get_policy"),
+        params: { ...call(TESTNET.dao, "get_policy").params, request_type: "view_account" },
+      },
+      call("other-dao.sputnikv2.testnet", "get_policy"),
+      call("usdc.tether-token.near", "get_policy"),
+    ])
+      expect((await POST(req(body))).status).toBe(403);
+    expect(f).toHaveBeenCalledOnce();
+    // The escrow and registry stay readable as before.
+    expect((await POST(req(call(TESTNET.registry, "get_attestations")))).status).toBe(200);
+  });
+
   it("refuses anything else without contacting the RPC", async () => {
     process.env.NEAR_RPC_URL = "http://127.0.0.1:3030";
     const f = vi.fn();

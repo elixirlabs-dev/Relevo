@@ -1,7 +1,8 @@
 /**
- * /rpc: forwards read-only view calls on this app's escrow and receipt registry to the NEAR RPC. Anything else (other
- * contracts, transactions, sandbox_* state patches, other queries) is refused, so a public site is not
- * an open RPC proxy.
+ * /rpc: forwards read-only view calls on this app's escrow and receipt registry to the NEAR RPC, plus
+ * get_policy on this app's DAO (to label attesters with their DAO role). Anything else (other contracts,
+ * other DAO methods, transactions, sandbox_* state patches, other queries) is refused, so a public site
+ * is not an open RPC proxy.
  */
 import { deployment, rpcUrl } from "../../lib/deployment.ts";
 
@@ -9,7 +10,10 @@ export const dynamic = "force-dynamic";
 
 export async function POST(req: Request): Promise<Response> {
   const target = rpcUrl();
-  let body: { method?: unknown; params?: { request_type?: unknown; account_id?: unknown } };
+  let body: {
+    method?: unknown;
+    params?: { request_type?: unknown; account_id?: unknown; method_name?: unknown };
+  };
   try {
     body = await req.json();
   } catch {
@@ -19,7 +23,8 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({ error: "only contract view calls are allowed" }, { status: 403 });
   const d = deployment();
   const readable = [d.escrow, ...(d.registry ? [d.registry] : [])];
-  if (!readable.includes(body.params.account_id as string))
+  const daoPolicy = !!d.dao && body.params.account_id === d.dao && body.params.method_name === "get_policy";
+  if (!readable.includes(body.params.account_id as string) && !daoPolicy)
     return Response.json({ error: "only this app's escrow and registry can be read" }, { status: 403 });
   const r = await fetch(target, {
     method: "POST",
