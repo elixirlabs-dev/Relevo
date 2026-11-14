@@ -15,6 +15,8 @@ export const AMOUNT_2DP = /^\d{1,15}\.\d{2}$/;
 
 /** Enough deposit for one anchor or one ed25519 key set; the registry refunds what it doesn't use. */
 export const ANCHOR_DEPOSIT = 10_000_000_000_000_000_000_000n; // 0.01 NEAR
+/** Enough deposit for one attestation; the registry refunds what it doesn't use. */
+export const ATTEST_DEPOSIT = 10_000_000_000_000_000_000_000n; // 0.01 NEAR
 /** A key set with an ML-DSA-65 key stores about 2 kB more. */
 export const KEYS_DEPOSIT = 50_000_000_000_000_000_000_000n; // 0.05 NEAR
 

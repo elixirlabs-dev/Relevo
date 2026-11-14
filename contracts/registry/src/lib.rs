@@ -18,6 +18,7 @@ use near_sdk::{
 
 pub const MLDSA65_PK_LEN: usize = 1952;
 pub const MAX_RECEIPT_ID_LEN: usize = 64;
+pub const MAX_ATTESTATIONS: usize = 100;
 
 #[near(serializers = [borsh])]
 #[derive(Clone)]
@@ -33,6 +34,19 @@ pub struct Anchor {
     pub receipt_hash: [u8; 32],
     pub key_version: u32,
     pub anchored_at_ns: u64,
+}
+
+#[near(serializers = [borsh])]
+#[derive(Clone)]
+pub struct Attestation {
+    pub attester: AccountId,
+    pub attested_at_ns: u64,
+}
+
+#[near(serializers = [json])]
+pub struct AttestationView {
+    pub attester: AccountId,
+    pub attested_at_ns: U64,
 }
 
 #[near(serializers = [json])]
@@ -61,6 +75,8 @@ enum StorageKey {
     KeyCount,
     Keys,
     Anchors,
+    /// Added after the first deployment; opened on the fly, not a `Registry` field, so no migration.
+    Attestations,
 }
 
 #[near(contract_state)]
@@ -125,7 +141,7 @@ impl Registry {
             json!({ "issuer": issuer, "version": version,
                     "receipt_pk": String::from(&receipt_pk), "mldsa65": has_mldsa65 }),
         );
-        self.settle_storage(before);
+        self.settle_storage(before, None);
         version
     }
 
@@ -155,7 +171,58 @@ impl Registry {
             json!({ "issuer": issuer, "receipt_id": receipt_id, "key_version": key_version,
                     "receipt_hash": near_sdk::bs58::encode(hash).into_string() }),
         );
-        self.settle_storage(before);
+        self.settle_storage(before, None);
+    }
+
+    /// The caller vouches that it checked this anchored receipt. One attestation per account.
+    #[payable]
+    pub fn attest(
+        &mut self,
+        issuer: AccountId,
+        receipt_id: String,
+        receipt_hash: Base58CryptoHash,
+    ) {
+        let before = env::storage_usage();
+        let key = (issuer.clone(), receipt_id.clone());
+        let anchor = match self.anchors.get(&key) {
+            Some(a) => a,
+            None => env::panic_str("not_anchored"),
+        };
+        let hash: [u8; 32] = receipt_hash.into();
+        require!(anchor.receipt_hash == hash, "hash_mismatch");
+        let attester = env::predecessor_account_id();
+        let mut map = attestations_map();
+        let mut list = map.get(&key).cloned().unwrap_or_default();
+        require!(
+            !list.iter().any(|a| a.attester == attester),
+            "already_attested"
+        );
+        require!(list.len() < MAX_ATTESTATIONS, "too_many_attestations");
+        list.push(Attestation {
+            attester: attester.clone(),
+            attested_at_ns: env::block_timestamp(),
+        });
+        map.insert(key, list);
+        emit(
+            "receipt_attested",
+            json!({ "issuer": issuer, "receipt_id": receipt_id, "attester": attester }),
+        );
+        self.settle_storage(before, Some(&mut map));
+    }
+
+    /// Who attested this receipt, in attestation order.
+    pub fn get_attestations(&self, issuer: AccountId, receipt_id: String) -> Vec<AttestationView> {
+        attestations_map()
+            .get(&(issuer, receipt_id))
+            .map(|l| {
+                l.iter()
+                    .map(|a| AttestationView {
+                        attester: a.attester.clone(),
+                        attested_at_ns: U64(a.attested_at_ns),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     /// The issuer's keys: the given version, or the current one.
@@ -188,16 +255,27 @@ impl Registry {
     }
 }
 
+fn attestations_map() -> LookupMap<(AccountId, String), Vec<Attestation>> {
+    LookupMap::new(StorageKey::Attestations)
+}
+
 fn ed25519_string(bytes: &[u8; 32]) -> String {
     String::from(&PublicKey::from_parts(CurveType::ED25519, bytes.to_vec()).expect("ed25519"))
 }
 
 impl Registry {
     /// Charges the caller for the bytes this call added and refunds the rest of the deposit.
-    fn settle_storage(&mut self, before: u64) {
+    fn settle_storage(
+        &mut self,
+        before: u64,
+        extra: Option<&mut LookupMap<(AccountId, String), Vec<Attestation>>>,
+    ) {
         self.key_count.flush();
         self.keys.flush();
         self.anchors.flush();
+        if let Some(m) = extra {
+            m.flush();
+        }
         let added = env::storage_usage().saturating_sub(before) as u128;
         let cost = added * env::storage_byte_cost().as_yoctonear();
         let attached = env::attached_deposit().as_yoctonear();
