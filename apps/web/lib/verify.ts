@@ -4,7 +4,12 @@
  * the escrow's get_batch. Returns each check that ran, in order; it stops early when continuing would
  * mean trusting the file (another escrow) or there is nothing to check against (no such batch).
  */
-import { type CheckReport, checkSummaryProblems, isCheckReport } from "@elivo/shared/check-report";
+import {
+  CHECK_REPORT_ID,
+  type CheckReport,
+  checkSummaryProblems,
+  isCheckReport,
+} from "@elivo/shared/check-report";
 import {
   type DirectReceipt,
   type DirectSignature,
@@ -377,6 +382,9 @@ async function checkedBefore(
   view: View,
 ): Promise<Check> {
   const fail = (detail: string): Check => ({ id: "checked_before", ok: false, detail });
+  // Receipt ids of that form are refused by /issue, so an anchor under one is a check report.
+  if (!CHECK_REPORT_ID.test(ref.report_id))
+    return fail(`"${ref.report_id}" is not a check report id (check-YYYYMMDD-HHMMSS)`);
   let a: RegistryAnchor | null;
   try {
     a = await view<RegistryAnchor | null>(registry, "get_receipt", {
@@ -401,7 +409,11 @@ async function checkedBefore(
   const checkAt = nsToUtc(a.anchored_at_ns as string);
   const receiptAt = nsToUtc(receiptAnchor.anchored_at_ns as string);
   return earlier
-    ? { id: "checked_before", ok: true, detail: `check anchored ${checkAt}, receipt anchored ${receiptAt}` }
+    ? {
+        id: "checked_before",
+        ok: true,
+        detail: `A check report with this hash was anchored at ${checkAt}, before the receipt (${receiptAt})`,
+      }
     : fail(
         `The check was anchored at ${checkAt}, not before the receipt (${receiptAt}): it was not made before payment`,
       );

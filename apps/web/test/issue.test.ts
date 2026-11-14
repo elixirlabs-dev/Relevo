@@ -134,6 +134,14 @@ describe("prepareIssue", () => {
     expect(badId.ok ? [] : badId.errors).toEqual([
       "Receipt id: 1 to 64 letters, digits, dots, dashes or underscores",
     ]);
+    // Check report ids are kept for check reports, so a receipt can't pass as one in check_ref.
+    const checkLike = prepareIssue(
+      { ...base, receiptId: "check-20261114-120000", currentKeys: null },
+      memoryStorage(),
+    );
+    expect(checkLike.ok ? [] : checkLike.errors).toEqual([
+      "Receipt id: check-YYYYMMDD-HHMMSS is kept for check reports; choose another id",
+    ]);
   });
 
   it("keeps the signed receipt and its salt as pending, so a wallet that reloads the page doesn't lose them", () => {

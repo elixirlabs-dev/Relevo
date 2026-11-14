@@ -1,6 +1,6 @@
 import { isPayeeProof, payeeRefMatches, verifyPayeeProofStructure } from "@elivo/shared/direct-receipt-v2";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IssueView } from "../components/IssueView.tsx";
 import { recordAnchoredCheck } from "../lib/check.ts";
 import { PENDING_KEY } from "../lib/issue.ts";
@@ -68,7 +68,10 @@ beforeEach(() => {
   sessionStorage.clear();
   localStorage.clear();
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 describe("IssueView", () => {
   it("asks for a wallet before it can sign", () => {
@@ -219,7 +222,11 @@ describe("IssueView", () => {
     ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Sign and anchor the receipt" }));
     await screen.findByText("Anchored and verified against the chain");
-    expect(screen.getByText(/✓ Checked before payment: check anchored 2026-11-14 12:00:00 UTC/)).toBeTruthy();
+    expect(
+      screen.getByText(
+        /✓ Checked before payment: A check report with this hash was anchored at 2026-11-14 12:00:00 UTC/,
+      ),
+    ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Download receipt (auditor copy)" }));
     expect(JSON.parse(saved[0].text).check_ref).toEqual({
       report_id: "check-20261114-115900",
@@ -251,6 +258,78 @@ describe("IssueView", () => {
     expect(screen.queryByText(/Checked before payment/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Download receipt (auditor copy)" }));
     expect(JSON.parse(saved[0].text).check_ref).toBeNull();
+  });
+
+  it("doesn't link, by default, a check the registry has no anchor for, and says why", async () => {
+    const c = fakeChain();
+    recordAnchoredCheck(
+      "alice.testnet",
+      { report_id: "check-20261114-115900", hash: "CheckHash1", checked_at: "2026-11-14T11:59:00.000Z" },
+      localStorage,
+    );
+    const saved: Array<{ name: string; text: string }> = [];
+    render(
+      <IssueView
+        cfg={cfg}
+        wallet={{ port: port("alice.testnet", c.apply), wallets }}
+        view={c.view}
+        retryMs={1}
+        save={(name, text) => saved.push({ name, text })}
+      />,
+    );
+    expect(
+      await screen.findByText(
+        "Not linked: check check-20261114-115900 has no anchor on the registry, so it can't count as checked before payment",
+      ),
+    ).toBeTruthy();
+    expect((screen.getByLabelText("Don't link a check") as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Sign and anchor the receipt" }));
+    await screen.findByText("Anchored and verified against the chain");
+    fireEvent.click(screen.getByRole("button", { name: "Download receipt (auditor copy)" }));
+    expect(JSON.parse(saved[0].text).check_ref).toBeNull();
+  });
+
+  it("keeps the pending salt and warns when this browser can't store the receipt", async () => {
+    const c = fakeChain();
+    // A localStorage that is full for the receipt store only.
+    const real = localStorage;
+    const full = {
+      getItem: (k: string) => real.getItem(k),
+      removeItem: (k: string) => real.removeItem(k),
+      setItem: (k: string, v: string) => {
+        if (k.startsWith("elivo-issued:")) throw new DOMException("quota", "QuotaExceededError");
+        real.setItem(k, v);
+      },
+    } as Storage;
+    vi.spyOn(window, "localStorage", "get").mockReturnValue(full);
+    const copied: string[] = [];
+    render(
+      <IssueView
+        cfg={cfg}
+        wallet={{ port: port("alice.testnet", c.apply), wallets }}
+        view={c.view}
+        retryMs={1}
+        copy={async (s) => {
+          copied.push(s);
+        }}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Sign and anchor the receipt" }));
+    await screen.findByText("Anchored and verified against the chain");
+    expect(
+      screen.getByText(
+        /This browser couldn't keep this receipt; download the salt now or you can't make payee links later\./,
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText(/kept in this browser's storage/)).toBeNull();
+    // The pending entry is the only other copy of the salt: it stays.
+    expect(sessionStorage.getItem(PENDING_KEY)).not.toBeNull();
+    expect(listIssued("alice.testnet", localStorage)).toEqual([]);
+    // Links still work while the page is open, and the salt can still be downloaded.
+    const table = screen.getByRole("table", { name: "Payee links" });
+    fireEvent.click(within(table).getAllByRole("button", { name: "Copy link" })[0]);
+    await waitFor(() => expect(copied).toHaveLength(1));
+    expect(screen.getByRole("button", { name: "Download salt (keep it secret)" })).toBeTruthy();
   });
 
   it("says when there is no anchored check to link", async () => {

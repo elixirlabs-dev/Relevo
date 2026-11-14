@@ -5,11 +5,10 @@
 import { ed25519PublicKeyStr } from "@elivo/shared/direct-build";
 import { ANCHOR_DEPOSIT, KEYS_DEPOSIT } from "@elivo/shared/direct-receipt";
 import { type MlDsaKey, mldsaFromSeed } from "@elivo/shared/pq-keys";
+import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import type { FunctionCallSpec, TxSpec } from "./txs.ts";
 
 const TGAS = 1_000_000_000_000n;
-const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
-const unhex = (s: string) => Uint8Array.from(s.match(/../g) ?? [], (h) => Number.parseInt(h, 16));
 const random32 = () => crypto.getRandomValues(new Uint8Array(32));
 
 export interface IssuerKeys {
@@ -33,13 +32,13 @@ export function issuerKeys(account: string, storage: Storage | null): IssuerKeys
   }
   const valid = (s: unknown) => typeof s === "string" && /^[0-9a-f]{64}$/.test(s);
   if (!saved || !valid(saved.ed) || !valid(saved.pq)) {
-    saved = { ed: hex(random32()), pq: hex(random32()) };
+    saved = { ed: bytesToHex(random32()), pq: bytesToHex(random32()) };
     try {
       storage?.setItem(id, JSON.stringify(saved));
     } catch {}
   }
-  const edSeed = unhex(saved.ed);
-  return { edSeed, edPk: ed25519PublicKeyStr(edSeed), pq: mldsaFromSeed(unhex(saved.pq)) };
+  const edSeed = hexToBytes(saved.ed);
+  return { edSeed, edPk: ed25519PublicKeyStr(edSeed), pq: mldsaFromSeed(hexToBytes(saved.pq)) };
 }
 
 function call(methodName: string, args: object, deposit: bigint): FunctionCallSpec {

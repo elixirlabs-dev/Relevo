@@ -21,6 +21,7 @@
     "@near-wallet-selector/intear-wallet": "10.1.4",
     "@near-wallet-selector/meteor-wallet": "10.1.4",
     "@near-wallet-selector/sender": "10.1.4",
+    "@noble/hashes": "2.4.0",
     "near-api-js": "6.5.1",
     "next": "16.4.5",
     "react": "19.3.1",

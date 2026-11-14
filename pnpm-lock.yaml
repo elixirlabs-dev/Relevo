@@ -103,6 +103,9 @@ importers:
       '@near-wallet-selector/sender':
         specifier: 10.1.4
         version: 10.1.4(aa211f6842ae8a1a94a4a8d5025a4b2f)
+      '@noble/hashes':
+        specifier: 2.4.0
+        version: 2.4.0
       near-api-js:
         specifier: 6.5.1
         version: 6.5.1(54f71d86ad09ccd0ed0cf4d1972dabc3)

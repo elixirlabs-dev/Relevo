@@ -6,6 +6,7 @@
  */
 import { type DirectReceiptV2, type PayeeProof, payeeProof } from "@elivo/shared/direct-receipt-v2";
 import { normaliseName } from "@elivo/shared/payout-check";
+import { hexToBytes } from "@noble/hashes/utils.js";
 import { isPendingIssue } from "./issue.ts";
 
 export interface IssuedReceipt {
@@ -29,6 +30,9 @@ export interface PayoutMatch {
   status: string;
 }
 
+/** The most receipts kept per account; older ones are dropped when a new one is saved. */
+export const MAX_ISSUED = 50;
+
 const key = (account: string) => `elivo-issued:${account}`;
 
 const isIssued = (v: unknown): v is IssuedReceipt =>
@@ -48,12 +52,26 @@ export function listIssued(account: string, storage: Storage | null): IssuedRece
   }
 }
 
-/** Keeps an anchored receipt in this browser (replacing one saved under the same id). */
-export function saveIssued(account: string, issued: IssuedReceipt, storage: Storage | null) {
-  const rest = listIssued(account, storage).filter((r) => r.receipt_id !== issued.receipt_id);
+/**
+ * Keeps an anchored receipt in this browser, newest first, replacing one saved under the same id and
+ * keeping at most MAX_ISSUED receipts. Entries this version doesn't recognise are carried over as they
+ * are. Returns false when the browser didn't keep it (storage blocked or full, or holding something
+ * unreadable that it won't overwrite): the caller must not drop its own copy of the salt then.
+ */
+export function saveIssued(account: string, issued: IssuedReceipt, storage: Storage | null): boolean {
+  if (!storage) return false;
   try {
-    storage?.setItem(key(account), JSON.stringify([issued, ...rest]));
-  } catch {}
+    const raw = storage.getItem(key(account));
+    const stored: unknown = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(stored)) return false;
+    const known = stored.filter(isIssued).filter((r) => r.receipt_id !== issued.receipt_id);
+    const unknown = stored.filter((v) => !isIssued(v));
+    const next = [issued, ...known.slice(0, MAX_ISSUED - 1), ...unknown];
+    storage.setItem(key(account), JSON.stringify(next));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 const compact = (s: string) => s.replace(/\s+/g, "");
@@ -81,9 +99,7 @@ export function findPayout(account: string, query: string, storage: Storage | nu
   return out;
 }
 
-const unhex = (s: string) => Uint8Array.from(s.match(/../g) ?? [], (h) => Number.parseInt(h, 16));
-
 /** One payee's proof, made from the stored receipt and its salt. */
 export function payeeProofFor(r: IssuedReceipt, index: number): PayeeProof {
-  return payeeProof(r.receipt, index, unhex(r.receiptSaltHex));
+  return payeeProof(r.receipt, index, hexToBytes(r.receiptSaltHex));
 }

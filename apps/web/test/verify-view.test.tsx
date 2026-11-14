@@ -336,7 +336,8 @@ describe("VerifyView with a v2 receipt (per-payee proofs)", async () => {
       {
         id: "checked_before",
         ok: true,
-        detail: "check anchored 2026-11-14 11:00:00 UTC, receipt anchored 2026-11-14 12:00:00 UTC",
+        detail:
+          "A check report with this hash was anchored at 2026-11-14 11:00:00 UTC, before the receipt (2026-11-14 12:00:00 UTC)",
       },
     ],
   };
@@ -369,7 +370,7 @@ describe("VerifyView with a v2 receipt (per-payee proofs)", async () => {
     paste(text);
     expect(
       await screen.findByText(
-        "✓ Checked before payment: check anchored 2026-11-14 11:00:00 UTC, receipt anchored 2026-11-14 12:00:00 UTC",
+        "✓ Checked before payment: A check report with this hash was anchored at 2026-11-14 11:00:00 UTC, before the receipt (2026-11-14 12:00:00 UTC)",
       ),
     ).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Delivery report" })).toBeTruthy();

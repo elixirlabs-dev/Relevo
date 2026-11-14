@@ -504,7 +504,7 @@ C,032180000118359719,25,paid,2026-11-14T10:01:00Z,R3
       ["checked_before", true],
     ]);
     expect(byId(r).checked_before.detail).toBe(
-      "check anchored 2026-11-14 11:00:00 UTC, receipt anchored 2026-11-14 12:00:00 UTC",
+      "A check report with this hash was anchored at 2026-11-14 11:00:00 UTC, before the receipt (2026-11-14 12:00:00 UTC)",
     );
     expect(r.ok).toBe(true);
     expect(c.calls[1]).toEqual({
@@ -569,6 +569,18 @@ C,032180000118359719,25,paid,2026-11-14T10:01:00Z,R3
       detail: `${issuer} has anchored no check "${CHECK_ID}" on ${registry}`,
     });
     expect(r.ok).toBe(false);
+  });
+
+  it("fails the check-before line when check_ref doesn't name a check report, without reading it", async () => {
+    const pointsAtReceipt = make({ report_id: "receipt-earlier", report_hash: CHECK_HASH });
+    const c = regChain({ receipt_hash: directV2HashB58(pointsAtReceipt) });
+    const r = await verifyAgainstChain(JSON.stringify(pointsAtReceipt), vapp, c.view);
+    expect(byId(r).checked_before).toMatchObject({
+      ok: false,
+      detail: '"receipt-earlier" is not a check report id (check-YYYYMMDD-HHMMSS)',
+    });
+    expect(r.ok).toBe(false);
+    expect(c.calls).toHaveLength(1);
   });
 
   it("fails the check-before line when the anchor found belongs to another issuer", async () => {

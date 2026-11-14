@@ -5,6 +5,8 @@
  * they changed, then anchor the receipt. The receipt points at the last check this browser anchored
  * (`check_ref`), unless told not to. Names, account numbers and the receipt salt never leave the browser.
  */
+
+import { CHECK_REPORT_ID } from "@elivo/shared/check-report";
 import { parseResultsCsv } from "@elivo/shared/direct-build";
 import { RECEIPT_ID } from "@elivo/shared/direct-receipt";
 import {
@@ -15,6 +17,7 @@ import {
   isDirectReceiptV2,
   signDirectReceiptV2,
 } from "@elivo/shared/direct-receipt-v2";
+import { bytesToHex } from "@noble/hashes/utils.js";
 import { lastAnchoredCheck } from "./check.ts";
 import { issuerKeys, publishKeysThenAnchorTx } from "./issuer.ts";
 import type { TxSpec } from "./txs.ts";
@@ -34,8 +37,6 @@ Valentina Cruz,646180005555555554,18500.00,paid,2026-11-14T15:03:31Z,SIM-SPEI-20
  * salt and the payees' names and accounts, so the payee links can still be made afterwards.
  */
 export const PENDING_KEY = "elivo-pending-receipt";
-
-const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
 
 export interface IssueInput {
   csv: string;
@@ -80,6 +81,8 @@ export function prepareIssue(input: IssueInput, storage: Storage | null): Prepar
   const errors: string[] = [];
   if (!RECEIPT_ID.test(input.receiptId))
     errors.push("Receipt id: 1 to 64 letters, digits, dots, dashes or underscores");
+  else if (CHECK_REPORT_ID.test(input.receiptId))
+    errors.push("Receipt id: check-YYYYMMDD-HHMMSS is kept for check reports; choose another id");
   if (!/^[A-Z]{3}$/.test(input.currency)) errors.push("Currency: a 3-letter code such as MXN");
   const parsed = parseResultsCsv(input.csv, { rail: input.rail });
   for (const e of parsed.errors) errors.push(e.row ? `Row ${e.row}: ${e.reason}` : e.reason);
@@ -113,7 +116,7 @@ export function prepareIssue(input: IssueInput, storage: Storage | null): Prepar
   });
   const pending: PendingIssue = {
     receipt,
-    receiptSaltHex: hex(salt),
+    receiptSaltHex: bytesToHex(salt),
     names: parsed.rows.map((r) => r.name),
     accounts: parsed.rows.map((r) => r.account),
   };
@@ -131,7 +134,7 @@ export function isPendingIssue(v: unknown): v is PendingIssue {
   const n = p.receipt.payouts.length;
   return (
     typeof p.receiptSaltHex === "string" &&
-    /^[0-9a-f]{32,128}$/.test(p.receiptSaltHex) &&
+    /^[0-9a-f]{32}$/.test(p.receiptSaltHex) &&
     strings(p.names, n) &&
     strings(p.accounts, n)
   );

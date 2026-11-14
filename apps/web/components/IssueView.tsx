@@ -115,6 +115,8 @@ export function IssueView({
   /** When the linked check was anchored (from the registry), "missing" if it isn't, null while reading. */
   const [linkedAt, setLinkedAt] = useState<string | null>(null);
   const [unlink, setUnlink] = useState(false);
+  /** False when this browser couldn't store the issued receipt (storage full or blocked). */
+  const [kept, setKept] = useState(true);
   const [query, setQuery] = useState("");
   const [found, setFound] = useState<{ query: string; matches: PayoutMatch[] } | null>(null);
   const [link, setLink] = useState<CopiedLink | null>(null);
@@ -135,13 +137,16 @@ export function IssueView({
     // Anchored: the receipt is on-chain whatever the other checks say, so keep it (and its salt) here.
     if (o?.hash && o.checks.some((c) => c.id === "anchor" && c.ok)) {
       const rec: IssuedReceipt = { receipt_id: p.receipt.receipt_id, hash: o.hash, ...p };
-      saveIssued(p.receipt.issuer, rec, local());
+      const stored = saveIssued(p.receipt.issuer, rec, local());
+      setKept(stored);
       setMine(listIssued(p.receipt.issuer, local()));
       setIssued(rec);
-      try {
-        session()?.removeItem(PENDING_KEY);
-      } catch {}
       setPending(null);
+      // Not stored: the pending entry is the only other copy of the salt, so it stays until a save works.
+      if (stored)
+        try {
+          session()?.removeItem(PENDING_KEY);
+        } catch {}
     } else setPending(p);
   };
 
@@ -180,6 +185,7 @@ export function IssueView({
   useEffect(() => {
     setLinked(null);
     setLinkedAt(null);
+    setUnlink(false);
     setMine(account ? listIssued(account, local()) : []);
     if (!account) return;
     const last = lastAnchoredCheck(account, local());
@@ -190,7 +196,12 @@ export function IssueView({
       issuer: account,
       receipt_id: last.report_id,
     }).then(
-      (a) => live && setLinkedAt(a?.anchored_at_ns ? nsToUtc(a.anchored_at_ns) : "missing"),
+      (a) => {
+        if (!live) return;
+        setLinkedAt(a?.anchored_at_ns ? nsToUtc(a.anchored_at_ns) : "missing");
+        // A check that isn't on-chain can't count as checked before payment: don't link it by default.
+        if (!a?.anchored_at_ns) setUnlink(true);
+      },
       () => {},
     );
     return () => {
@@ -363,7 +374,9 @@ export function IssueView({
                   {linkedAt && linkedAt !== "missing"
                     ? `Linked to check ${linked.report_id} anchored at ${linkedAt}`
                     : linkedAt === "missing"
-                      ? `Linked to check ${linked.report_id}, but the registry has no anchor for it: /verify will not count it as checked before payment`
+                      ? unlink
+                        ? `Not linked: check ${linked.report_id} has no anchor on the registry, so it can't count as checked before payment`
+                        : `Linked to check ${linked.report_id}, but it has no anchor on the registry: /verify will not count it as checked before payment`
                       : `Linked to check ${linked.report_id} (checked at ${linked.checked_at})`}
                 </p>
                 <label className="tag">
@@ -437,6 +450,12 @@ export function IssueView({
         <div className="stack">
           <Sticker>
             <Eyebrow>Your anchored receipt</Eyebrow>
+            {!kept && (
+              <p className="bad" role="alert">
+                ⚠ This browser couldn't keep this receipt; download the salt now or you can't make payee links
+                later.
+              </p>
+            )}
             <div className="row">
               <Button onClick={() => save(`${issued.receipt_id}.json`, receiptText)}>
                 Download receipt (auditor copy)
@@ -477,9 +496,9 @@ export function IssueView({
             <Eyebrow>Payee links</Eyebrow>
             <p>Each link proves one payout. It shows nobody else's pay.</p>
             <p className="muted small">
-              Payee links and the payout search work only in this browser: the names, full accounts and the
-              receipt's secret salt are kept in this browser's storage and nowhere else. A link you copy opens
-              anywhere, and carries no name.
+              {kept
+                ? "Payee links and the payout search work only in this browser: the names, full accounts and the receipt's secret salt are kept in this browser's storage and nowhere else. A link you copy opens anywhere, and carries no name."
+                : "This browser couldn't store the names, full accounts or the receipt's secret salt, so these links can be made only while this page stays open. A link you copy opens anywhere, and carries no name."}
             </p>
             <div className="scroll">
               <table aria-label="Payee links">

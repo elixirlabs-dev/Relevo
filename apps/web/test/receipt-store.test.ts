@@ -8,7 +8,7 @@ import {
 } from "@elivo/shared/direct-receipt-v2";
 import { describe, expect, it } from "vitest";
 import { SAMPLE_RESULTS_CSV } from "../lib/issue.ts";
-import { findPayout, listIssued, payeeProofFor, saveIssued } from "../lib/receipt-store.ts";
+import { findPayout, listIssued, MAX_ISSUED, payeeProofFor, saveIssued } from "../lib/receipt-store.ts";
 
 function memoryStorage(): Storage {
   const m = new Map<string, string>();
@@ -102,6 +102,49 @@ describe("receipt store", () => {
     expect(JSON.stringify(p)).not.toContain("646180005555555554");
   });
 
+  it("says whether it kept the receipt: false when the store's key can't be written", () => {
+    const s = memoryStorage();
+    expect(saveIssued(account, issued("nov-1"), s)).toBe(true);
+    const full: Storage = {
+      ...s,
+      getItem: (k) => s.getItem(k),
+      setItem: (k, v) => {
+        if (k.startsWith("elivo-issued:")) throw new DOMException("quota", "QuotaExceededError");
+        s.setItem(k, v);
+      },
+    };
+    expect(saveIssued(account, issued("nov-2"), full)).toBe(false);
+    expect(listIssued(account, s).map((r) => r.receipt_id)).toEqual(["nov-1"]);
+    expect(saveIssued(account, issued("nov-3"), null)).toBe(false);
+  });
+
+  it("keeps the newest receipts only, and carries over entries it doesn't recognise", () => {
+    const s = memoryStorage();
+    const one = issued("r-0");
+    const older = Array.from({ length: MAX_ISSUED + 5 }, (_, i) => ({
+      ...one,
+      receipt_id: `r-${i}`,
+      receipt: { ...one.receipt, receipt_id: `r-${i}` },
+    }));
+    const foreign = { kind: "from a later version", receipt_id: "x" };
+    s.setItem(`elivo-issued:${account}`, JSON.stringify([...older, foreign]));
+    expect(saveIssued(account, issued("new"), s)).toBe(true);
+    const kept = listIssued(account, s).map((r) => r.receipt_id);
+    expect(kept).toHaveLength(MAX_ISSUED);
+    expect(kept[0]).toBe("new");
+    expect(kept[1]).toBe("r-0");
+    expect(kept.at(-1)).toBe(`r-${MAX_ISSUED - 2}`);
+    const raw = JSON.parse(s.getItem(`elivo-issued:${account}`) as string);
+    expect(raw.at(-1)).toEqual(foreign);
+  });
+
+  it("doesn't overwrite a store it can't read", () => {
+    const s = memoryStorage();
+    s.setItem(`elivo-issued:${account}`, "{not json");
+    expect(saveIssued(account, issued("nov-1"), s)).toBe(false);
+    expect(s.getItem(`elivo-issued:${account}`)).toBe("{not json");
+  });
+
   it("ignores broken or blocked storage", () => {
     const s = memoryStorage();
     s.setItem(`elivo-issued:${account}`, "{not json");
@@ -116,7 +159,7 @@ describe("receipt store", () => {
         throw new Error("blocked");
       },
     } as unknown as Storage;
-    expect(() => saveIssued(account, issued("nov-1"), blocked)).not.toThrow();
+    expect(saveIssued(account, issued("nov-1"), blocked)).toBe(false);
     expect(listIssued(account, blocked)).toEqual([]);
     expect(findPayout(account, "Mateo Ríos", null)).toEqual([]);
   });
